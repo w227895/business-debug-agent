@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek 对话 Agent</title>
+    <link rel="stylesheet" href="/css/agent.css">
+</head>
+<body>
+<main class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">DeepSeek Agent</div>
+        <nav class="nav-list">
+            <a class="nav-item active" href="/">聊天</a>
+        </nav>
+        <section class="memory-box">
+            <h2>当前记忆</h2>
+            <div id="memoryState" class="memory-empty">暂无</div>
+        </section>
+    </aside>
+
+    <section class="conversation">
+        <header class="topbar">
+            <div>
+                <h1>DeepSeek 对话 Agent</h1>
+                <p>使用 Spring AI 调用 DeepSeek；同一会话的历史消息会作为上下文传给模型。</p>
+            </div>
+        </header>
+
+        <section id="chatPanel" class="chat-panel">
+            <div class="message assistant">
+                <div class="bubble">
+                    你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
+                </div>
+            </div>
+        </section>
+
+        <form id="chatForm" class="composer">
+            <textarea id="messageInput" name="message" rows="3" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+            <button type="submit">发送</button>
+        </form>
+    </section>
+</main>
+
+<script>
+    const chatPanel = document.getElementById('chatPanel');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const memoryState = document.getElementById('memoryState');
+
+    let sessionId = localStorage.getItem('debug-agent-session-id') || '';
+
+    chatForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await sendMessage();
+    });
+
+    messageInput.addEventListener('keydown', async (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            await sendMessage();
+        }
+    });
+
+    async function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message) {
+            return;
+        }
+
+        appendMessage('user', message);
+        messageInput.value = '';
+        appendMessage('assistant', '正在调用 DeepSeek...');
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sessionId, message})
+            });
+            if (!response.ok) {
+                let errorText = `HTTP ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    errorText = errorBody.message || errorText;
+                } catch (ignore) {
+                }
+                throw new Error(errorText);
+            }
+            const body = await response.json();
+            sessionId = body.sessionId;
+            localStorage.setItem('debug-agent-session-id', sessionId);
+
+            chatPanel.lastElementChild.remove();
+            appendMessage('assistant', body.reply);
+            renderMemory(body.memory);
+        } catch (error) {
+            chatPanel.lastElementChild.remove();
+            appendMessage('assistant', '模型调用失败：' + error.message + '。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。');
+        }
+    }
+
+    function appendMessage(role, content) {
+        const wrapper = document.createElement('div');
+        wrapper.className = `message ${role}`;
+        wrapper.innerHTML = `<div class="bubble">${escapeHtml(content)}</div>`;
+        chatPanel.appendChild(wrapper);
+        chatPanel.scrollTop = chatPanel.scrollHeight;
+    }
+
+    function renderMemory(memory) {
+        const entries = Object.entries(memory || {});
+        if (entries.length === 0) {
+            memoryState.className = 'memory-empty';
+            memoryState.textContent = '暂无';
+            return;
+        }
+        memoryState.className = 'memory-list';
+        memoryState.innerHTML = entries.map(([key, value]) => `<div><span>${escapeHtml(key)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+</script>
+</body>
+</html>
