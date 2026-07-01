@@ -92,6 +92,51 @@ public class ChatSessionMemory {
                 LocalDateTime.now());
     }
 
+    public void addModelCallLog(
+            String sessionId,
+            String provider,
+            String model,
+            String requestMessagesJson,
+            String responseText,
+            boolean success,
+            String errorType,
+            String errorMessage,
+            long durationMillis,
+            ChatTokenUsage tokenUsage) {
+        ChatTokenUsage usage = tokenUsage == null ? ChatTokenUsage.empty() : tokenUsage;
+        jdbcTemplate.update("""
+                        INSERT INTO model_call_logs (
+                            session_id,
+                            provider,
+                            model,
+                            request_messages_json,
+                            response_text,
+                            success,
+                            error_type,
+                            error_message,
+                            duration_millis,
+                            prompt_tokens,
+                            completion_tokens,
+                            total_tokens,
+                            created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                sessionId,
+                provider,
+                model,
+                requestMessagesJson,
+                responseText,
+                success,
+                errorType,
+                errorMessage,
+                durationMillis,
+                usage.promptTokens(),
+                usage.completionTokens(),
+                usage.totalTokens(),
+                LocalDateTime.now());
+    }
+
     public Map<String, String> getFacts(String sessionId) {
         List<Map.Entry<String, String>> entries = jdbcTemplate.query("""
                         SELECT memory_key, memory_value

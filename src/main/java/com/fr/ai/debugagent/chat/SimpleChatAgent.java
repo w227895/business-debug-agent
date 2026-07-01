@@ -1,5 +1,7 @@
 package com.fr.ai.debugagent.chat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -8,10 +10,13 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,10 +29,18 @@ public class SimpleChatAgent {
 
     private final ChatSessionMemory memory;
     private final ChatModel chatModel;
+    private final ObjectMapper objectMapper;
+    private final String modelName;
 
-    public SimpleChatAgent(ChatSessionMemory memory, ChatModel chatModel) {
+    public SimpleChatAgent(
+            ChatSessionMemory memory,
+            ChatModel chatModel,
+            ObjectMapper objectMapper,
+            @Value("${spring.ai.deepseek.chat.options.model:deepseek-chat}") String modelName) {
         this.memory = memory;
         this.chatModel = chatModel;
+        this.objectMapper = objectMapper;
+        this.modelName = modelName;
     }
 
     public com.fr.ai.debugagent.chat.ChatResponse chat(ChatRequest request) {
@@ -85,11 +98,41 @@ public class SimpleChatAgent {
             }
         }
 
-        ChatResponse response = chatModel.call(new Prompt(promptMessages));
-        if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
-            throw new IllegalStateException("DeepSeek 返回为空");
+        String requestMessagesJson = toRequestMessagesJson(promptMessages);
+        long startedAt = System.nanoTime();
+        try {
+            ChatResponse response = chatModel.call(new Prompt(promptMessages));
+            if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
+                throw new IllegalStateException("DeepSeek 返回为空");
+            }
+            String reply = response.getResult().getOutput().getText();
+            ChatTokenUsage tokenUsage = toTokenUsage(response);
+            memory.addModelCallLog(
+                    sessionId,
+                    "deepseek",
+                    modelName,
+                    requestMessagesJson,
+                    reply,
+                    true,
+                    null,
+                    null,
+                    elapsedMillis(startedAt),
+                    tokenUsage);
+            return new AiReply(reply, tokenUsage);
+        } catch (RuntimeException ex) {
+            memory.addModelCallLog(
+                    sessionId,
+                    "deepseek",
+                    modelName,
+                    requestMessagesJson,
+                    null,
+                    false,
+                    ex.getClass().getName(),
+                    rootMessage(ex),
+                    elapsedMillis(startedAt),
+                    ChatTokenUsage.empty());
+            throw ex;
         }
-        return new AiReply(response.getResult().getOutput().getText(), toTokenUsage(response));
     }
 
     private ChatTokenUsage toTokenUsage(ChatResponse response) {
@@ -121,6 +164,47 @@ public class SimpleChatAgent {
         if (goalMatcher.find()) {
             memory.remember(sessionId, "goal", goalMatcher.group(1).trim());
         }
+    }
+
+    private String toRequestMessagesJson(List<Message> messages) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Message message : messages) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("role", roleOf(message));
+            item.put("content", message.getText());
+            items.add(item);
+        }
+        try {
+            return objectMapper.writeValueAsString(items);
+        } catch (JsonProcessingException ex) {
+            return "[{\"role\":\"system\",\"content\":\"Failed to serialize prompt messages.\"}]";
+        }
+    }
+
+    private String roleOf(Message message) {
+        if (message instanceof SystemMessage) {
+            return "system";
+        }
+        if (message instanceof AssistantMessage) {
+            return "assistant";
+        }
+        if (message instanceof UserMessage) {
+            return "user";
+        }
+        return message.getClass().getSimpleName();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null ? throwable.getMessage() : message;
     }
 
     private record AiReply(String content, ChatTokenUsage tokenUsage) {
