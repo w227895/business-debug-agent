@@ -4,6 +4,14 @@ server:
 spring:
   application:
     name: business-debug-agent
+  datasource:
+    url: jdbc:mysql://localhost:3306/business_debug_agent?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: root123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: always
   thymeleaf:
     cache: false
   ai:

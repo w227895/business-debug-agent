@@ -47,6 +47,19 @@ public class SimpleChatAgent {
         );
     }
 
+    public ChatSessionSnapshot getSession(String sessionId) {
+        String normalizedSessionId = memory.normalizeSessionId(sessionId);
+        return new ChatSessionSnapshot(
+                normalizedSessionId,
+                memory.getMessages(normalizedSessionId),
+                memory.getFacts(normalizedSessionId)
+        );
+    }
+
+    public List<ChatSessionSummary> listSessions() {
+        return memory.listSessions();
+    }
+
     private String callDeepSeek(String sessionId) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""

@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +31,26 @@ public class ChatApiController {
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(new ChatErrorResponse("DeepSeek 调用失败：" + rootMessage(ex)));
+        }
+    }
+
+    @GetMapping(value = "/{sessionId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getSession(@PathVariable("sessionId") String sessionId) {
+        try {
+            return ResponseEntity.ok(chatAgent.getSession(sessionId));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ChatErrorResponse("会话读取失败：" + rootMessage(ex)));
+        }
+    }
+
+    @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> listSessions() {
+        try {
+            return ResponseEntity.ok(chatAgent.listSessions());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ChatErrorResponse("会话列表读取失败：" + rootMessage(ex)));
         }
     }
 

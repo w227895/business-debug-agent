@@ -11,8 +11,12 @@
     <aside class="sidebar">
         <div class="brand">DeepSeek Agent</div>
         <nav class="nav-list">
-            <a class="nav-item active" href="/">聊天</a>
+            <button id="newChatButton" class="nav-action" type="button">新对话</button>
         </nav>
+        <section class="session-box">
+            <h2>历史对话</h2>
+            <div id="sessionList" class="session-empty">暂无</div>
+        </section>
         <section class="memory-box">
             <h2>当前记忆</h2>
             <div id="memoryState" class="memory-empty">暂无</div>
@@ -47,8 +51,17 @@
     const chatForm = document.getElementById('chatForm');
     const messageInput = document.getElementById('messageInput');
     const memoryState = document.getElementById('memoryState');
+    const newChatButton = document.getElementById('newChatButton');
+    const sessionList = document.getElementById('sessionList');
 
     let sessionId = localStorage.getItem('debug-agent-session-id') || '';
+
+    loadSessions();
+    loadSession();
+
+    newChatButton.addEventListener('click', () => {
+        startNewChat();
+    });
 
     chatForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -61,6 +74,56 @@
             await sendMessage();
         }
     });
+
+    function startNewChat() {
+        sessionId = '';
+        localStorage.removeItem('debug-agent-session-id');
+        renderWelcome();
+        renderMemory({});
+        renderSessions([]);
+        loadSessions();
+        messageInput.focus();
+    }
+
+    async function loadSession() {
+        if (!sessionId) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/chat/${encodeURIComponent(sessionId)}`);
+            if (!response.ok) {
+                return;
+            }
+            const body = await response.json();
+            sessionId = body.sessionId;
+            localStorage.setItem('debug-agent-session-id', sessionId);
+            renderMessages(body.messages);
+            renderMemory(body.memory);
+        } catch (ignore) {
+        }
+    }
+
+    async function loadSessions() {
+        try {
+            const response = await fetch('/api/chat/sessions');
+            if (!response.ok) {
+                return;
+            }
+            renderSessions(await response.json());
+        } catch (ignore) {
+        }
+    }
+
+    async function switchSession(nextSessionId) {
+        if (!nextSessionId || nextSessionId === sessionId) {
+            return;
+        }
+        sessionId = nextSessionId;
+        localStorage.setItem('debug-agent-session-id', sessionId);
+        await loadSession();
+        await loadSessions();
+    }
 
     async function sendMessage() {
         const message = messageInput.value.trim();
@@ -94,6 +157,7 @@
             chatPanel.lastElementChild.remove();
             appendMessage('assistant', body.reply);
             renderMemory(body.memory);
+            loadSessions();
         } catch (error) {
             chatPanel.lastElementChild.remove();
             appendMessage('assistant', '模型调用失败：' + error.message + '。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。');
@@ -106,6 +170,49 @@
         wrapper.innerHTML = `<div class="bubble">${escapeHtml(content)}</div>`;
         chatPanel.appendChild(wrapper);
         chatPanel.scrollTop = chatPanel.scrollHeight;
+    }
+
+    function renderWelcome() {
+        chatPanel.innerHTML = `
+            <div class="message assistant">
+                <div class="bubble">
+                    你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
+                </div>
+            </div>
+        `;
+    }
+
+    function renderMessages(messages) {
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return;
+        }
+        chatPanel.innerHTML = '';
+        for (const item of messages) {
+            appendMessage(item.role, item.content);
+        }
+    }
+
+    function renderSessions(sessions) {
+        if (!Array.isArray(sessions) || sessions.length === 0) {
+            sessionList.className = 'session-empty';
+            sessionList.textContent = '暂无';
+            return;
+        }
+
+        sessionList.className = 'session-list';
+        sessionList.innerHTML = sessions.map((item) => {
+            const activeClass = item.sessionId === sessionId ? ' active' : '';
+            return `
+                <button class="session-item${activeClass}" type="button" data-session-id="${escapeHtml(item.sessionId)}">
+                    <span>${escapeHtml(item.title)}</span>
+                    <small>${formatTime(item.updatedAt)}</small>
+                </button>
+            `;
+        }).join('');
+
+        sessionList.querySelectorAll('.session-item').forEach((item) => {
+            item.addEventListener('click', () => switchSession(item.dataset.sessionId));
+        });
     }
 
     function renderMemory(memory) {
@@ -126,6 +233,22 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+    }
+
+    function formatTime(value) {
+        if (!value) {
+            return '';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 </script>
 </body>
