@@ -4,6 +4,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -36,14 +37,16 @@ public class SimpleChatAgent {
         memory.addMessage(sessionId, "user", userMessage);
         captureFacts(sessionId, userMessage);
 
-        String reply = callDeepSeek(sessionId);
-        memory.addMessage(sessionId, "assistant", reply);
+        AiReply aiReply = callDeepSeek(sessionId);
+        memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage());
 
         return new com.fr.ai.debugagent.chat.ChatResponse(
                 sessionId,
-                reply,
+                aiReply.content(),
                 memory.getMessages(sessionId),
-                memory.getFacts(sessionId)
+                memory.getFacts(sessionId),
+                aiReply.tokenUsage(),
+                memory.getTotalTokenUsage(sessionId)
         );
     }
 
@@ -52,7 +55,8 @@ public class SimpleChatAgent {
         return new ChatSessionSnapshot(
                 normalizedSessionId,
                 memory.getMessages(normalizedSessionId),
-                memory.getFacts(normalizedSessionId)
+                memory.getFacts(normalizedSessionId),
+                memory.getTotalTokenUsage(normalizedSessionId)
         );
     }
 
@@ -60,7 +64,7 @@ public class SimpleChatAgent {
         return memory.listSessions();
     }
 
-    private String callDeepSeek(String sessionId) {
+    private AiReply callDeepSeek(String sessionId) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
                 你是一个支持上下文记忆的业务对话 Agent。
@@ -85,7 +89,26 @@ public class SimpleChatAgent {
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             throw new IllegalStateException("DeepSeek 返回为空");
         }
-        return response.getResult().getOutput().getText();
+        return new AiReply(response.getResult().getOutput().getText(), toTokenUsage(response));
+    }
+
+    private ChatTokenUsage toTokenUsage(ChatResponse response) {
+        if (response.getMetadata() == null || response.getMetadata().getUsage() == null) {
+            return ChatTokenUsage.empty();
+        }
+
+        Usage usage = response.getMetadata().getUsage();
+        int promptTokens = positiveOrZero(usage.getPromptTokens());
+        int completionTokens = positiveOrZero(usage.getCompletionTokens());
+        int totalTokens = positiveOrZero(usage.getTotalTokens());
+        if (totalTokens == 0 && (promptTokens > 0 || completionTokens > 0)) {
+            totalTokens = promptTokens + completionTokens;
+        }
+        return new ChatTokenUsage(promptTokens, completionTokens, totalTokens);
+    }
+
+    private int positiveOrZero(Integer value) {
+        return value == null || value < 0 ? 0 : value;
     }
 
     private void captureFacts(String sessionId, String message) {
@@ -98,5 +121,8 @@ public class SimpleChatAgent {
         if (goalMatcher.find()) {
             memory.remember(sessionId, "goal", goalMatcher.group(1).trim());
         }
+    }
+
+    private record AiReply(String content, ChatTokenUsage tokenUsage) {
     }
 }

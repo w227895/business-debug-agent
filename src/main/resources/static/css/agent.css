@@ -80,19 +80,23 @@ body {
     margin-bottom: 18px;
 }
 
-.memory-box {
+.memory-box,
+.token-box {
     border-top: 1px solid var(--line);
     padding-top: 18px;
+    margin-bottom: 18px;
 }
 
 .session-box h2,
-.memory-box h2 {
+.memory-box h2,
+.token-box h2 {
     margin: 0 0 12px;
     font-size: 15px;
 }
 
 .session-empty,
-.memory-empty {
+.memory-empty,
+.token-empty {
     color: var(--muted);
     font-size: 14px;
 }
@@ -137,12 +141,14 @@ body {
     font-size: 12px;
 }
 
-.memory-list {
+.memory-list,
+.token-list {
     display: grid;
     gap: 10px;
 }
 
-.memory-list div {
+.memory-list div,
+.token-list div {
     display: grid;
     gap: 4px;
     padding: 10px;
@@ -151,12 +157,14 @@ body {
     background: #fbfcff;
 }
 
-.memory-list span {
+.memory-list span,
+.token-list span {
     color: var(--muted);
     font-size: 12px;
 }
 
-.memory-list strong {
+.memory-list strong,
+.token-list strong {
     font-size: 14px;
     word-break: break-word;
 }
@@ -212,6 +220,16 @@ body {
 .message.user .bubble {
     background: #eaf2ff;
     border-color: #bfd5ff;
+}
+
+.message-meta {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.message-meta span {
+    margin-left: 8px;
 }
 
 .composer {

@@ -7,6 +7,8 @@ public record ChatResponse(
         String sessionId,
         String reply,
         List<ChatMessage> messages,
-        Map<String, String> memory
+        Map<String, String> memory,
+        ChatTokenUsage tokenUsage,
+        ChatTokenUsage totalTokenUsage
 ) {
 }

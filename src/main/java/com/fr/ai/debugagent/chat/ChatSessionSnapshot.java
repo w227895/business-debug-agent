@@ -6,6 +6,7 @@ import java.util.Map;
 public record ChatSessionSnapshot(
         String sessionId,
         List<ChatMessage> messages,
-        Map<String, String> memory
+        Map<String, String> memory,
+        ChatTokenUsage totalTokenUsage
 ) {
 }

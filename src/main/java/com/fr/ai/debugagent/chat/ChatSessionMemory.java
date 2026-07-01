@@ -1,5 +1,6 @@
 package com.fr.ai.debugagent.chat;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -18,6 +19,13 @@ public class ChatSessionMemory {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @PostConstruct
+    public void ensureTokenColumns() {
+        ensureColumn("prompt_tokens", "INT NOT NULL DEFAULT 0");
+        ensureColumn("completion_tokens", "INT NOT NULL DEFAULT 0");
+        ensureColumn("total_tokens", "INT NOT NULL DEFAULT 0");
+    }
+
     public String normalizeSessionId(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return UUID.randomUUID().toString();
@@ -26,19 +34,35 @@ public class ChatSessionMemory {
     }
 
     public void addMessage(String sessionId, String role, String content) {
+        addMessage(sessionId, role, content, ChatTokenUsage.empty());
+    }
+
+    public void addMessage(String sessionId, String role, String content, ChatTokenUsage tokenUsage) {
+        ChatTokenUsage usage = tokenUsage == null ? ChatTokenUsage.empty() : tokenUsage;
         jdbcTemplate.update("""
-                        INSERT INTO chat_messages (session_id, role, content, created_at)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO chat_messages (
+                            session_id,
+                            role,
+                            content,
+                            created_at,
+                            prompt_tokens,
+                            completion_tokens,
+                            total_tokens
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
                 sessionId,
                 role,
                 content,
-                LocalDateTime.now());
+                LocalDateTime.now(),
+                usage.promptTokens(),
+                usage.completionTokens(),
+                usage.totalTokens());
     }
 
     public List<ChatMessage> getMessages(String sessionId) {
         return jdbcTemplate.query("""
-                        SELECT role, content, created_at
+                        SELECT role, content, created_at, prompt_tokens, completion_tokens, total_tokens
                         FROM chat_messages
                         WHERE session_id = ?
                         ORDER BY id ASC
@@ -46,7 +70,11 @@ public class ChatSessionMemory {
                 (rs, rowNum) -> new ChatMessage(
                         rs.getString("role"),
                         rs.getString("content"),
-                        rs.getTimestamp("created_at").toLocalDateTime()),
+                        rs.getTimestamp("created_at").toLocalDateTime(),
+                        new ChatTokenUsage(
+                                rs.getInt("prompt_tokens"),
+                                rs.getInt("completion_tokens"),
+                                rs.getInt("total_tokens"))),
                 sessionId);
     }
 
@@ -81,6 +109,22 @@ public class ChatSessionMemory {
             result.put(entry.getKey(), entry.getValue());
         }
         return Map.copyOf(result);
+    }
+
+    public ChatTokenUsage getTotalTokenUsage(String sessionId) {
+        return jdbcTemplate.queryForObject("""
+                        SELECT
+                            COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                            COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                            COALESCE(SUM(total_tokens), 0) AS total_tokens
+                        FROM chat_messages
+                        WHERE session_id = ?
+                        """,
+                (rs, rowNum) -> new ChatTokenUsage(
+                        rs.getInt("prompt_tokens"),
+                        rs.getInt("completion_tokens"),
+                        rs.getInt("total_tokens")),
+                sessionId);
     }
 
     public List<ChatSessionSummary> listSessions() {
@@ -122,5 +166,20 @@ public class ChatSessionMemory {
             return normalized;
         }
         return normalized.substring(0, 28) + "...";
+    }
+
+    private void ensureColumn(String columnName, String definition) {
+        Integer count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'chat_messages'
+                          AND column_name = ?
+                        """,
+                Integer.class,
+                columnName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("ALTER TABLE chat_messages ADD COLUMN " + columnName + " " + definition);
+        }
     }
 }

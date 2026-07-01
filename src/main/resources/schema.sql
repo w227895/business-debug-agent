@@ -4,6 +4,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     role VARCHAR(32) NOT NULL,
     content TEXT NOT NULL,
     created_at DATETIME(6) NOT NULL,
+    prompt_tokens INT NOT NULL DEFAULT 0,
+    completion_tokens INT NOT NULL DEFAULT 0,
+    total_tokens INT NOT NULL DEFAULT 0,
     INDEX idx_chat_messages_session_id_id (session_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

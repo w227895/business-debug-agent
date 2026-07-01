@@ -21,6 +21,10 @@
             <h2>当前记忆</h2>
             <div id="memoryState" class="memory-empty">暂无</div>
         </section>
+        <section class="token-box">
+            <h2>Token 消耗</h2>
+            <div id="tokenState" class="token-empty">暂无</div>
+        </section>
     </aside>
 
     <section class="conversation">
@@ -51,6 +55,7 @@
     const chatForm = document.getElementById('chatForm');
     const messageInput = document.getElementById('messageInput');
     const memoryState = document.getElementById('memoryState');
+    const tokenState = document.getElementById('tokenState');
     const newChatButton = document.getElementById('newChatButton');
     const sessionList = document.getElementById('sessionList');
 
@@ -80,6 +85,7 @@
         localStorage.removeItem('debug-agent-session-id');
         renderWelcome();
         renderMemory({});
+        renderTokenUsage({});
         renderSessions([]);
         loadSessions();
         messageInput.focus();
@@ -100,6 +106,7 @@
             localStorage.setItem('debug-agent-session-id', sessionId);
             renderMessages(body.messages);
             renderMemory(body.memory);
+            renderTokenUsage(body.totalTokenUsage);
         } catch (ignore) {
         }
     }
@@ -155,8 +162,9 @@
             localStorage.setItem('debug-agent-session-id', sessionId);
 
             chatPanel.lastElementChild.remove();
-            appendMessage('assistant', body.reply);
+            appendMessage('assistant', body.reply, body.tokenUsage);
             renderMemory(body.memory);
+            renderTokenUsage(body.totalTokenUsage);
             loadSessions();
         } catch (error) {
             chatPanel.lastElementChild.remove();
@@ -164,10 +172,15 @@
         }
     }
 
-    function appendMessage(role, content) {
+    function appendMessage(role, content, tokenUsage) {
         const wrapper = document.createElement('div');
         wrapper.className = `message ${role}`;
-        wrapper.innerHTML = `<div class="bubble">${escapeHtml(content)}</div>`;
+        wrapper.innerHTML = `
+            <div>
+                <div class="bubble">${escapeHtml(content)}</div>
+                ${renderMessageTokenUsage(role, tokenUsage)}
+            </div>
+        `;
         chatPanel.appendChild(wrapper);
         chatPanel.scrollTop = chatPanel.scrollHeight;
     }
@@ -188,8 +201,20 @@
         }
         chatPanel.innerHTML = '';
         for (const item of messages) {
-            appendMessage(item.role, item.content);
+            appendMessage(item.role, item.content, item.tokenUsage);
         }
+    }
+
+    function renderMessageTokenUsage(role, tokenUsage) {
+        if (role !== 'assistant' || !tokenUsage || !hasTokens(tokenUsage)) {
+            return '';
+        }
+        return `
+            <div class="message-meta">
+                本轮 ${formatNumber(tokenUsage.totalTokens)} tokens
+                <span>输入 ${formatNumber(tokenUsage.promptTokens)} / 输出 ${formatNumber(tokenUsage.completionTokens)}</span>
+            </div>
+        `;
     }
 
     function renderSessions(sessions) {
@@ -226,6 +251,26 @@
         memoryState.innerHTML = entries.map(([key, value]) => `<div><span>${escapeHtml(key)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
     }
 
+    function renderTokenUsage(tokenUsage) {
+        if (!tokenUsage || !hasTokens(tokenUsage)) {
+            tokenState.className = 'token-empty';
+            tokenState.textContent = '暂无';
+            return;
+        }
+        tokenState.className = 'token-list';
+        tokenState.innerHTML = `
+            <div><span>总计</span><strong>${formatNumber(tokenUsage.totalTokens)}</strong></div>
+            <div><span>输入</span><strong>${formatNumber(tokenUsage.promptTokens)}</strong></div>
+            <div><span>输出</span><strong>${formatNumber(tokenUsage.completionTokens)}</strong></div>
+        `;
+    }
+
+    function hasTokens(tokenUsage) {
+        return Number(tokenUsage.totalTokens || 0) > 0
+            || Number(tokenUsage.promptTokens || 0) > 0
+            || Number(tokenUsage.completionTokens || 0) > 0;
+    }
+
     function escapeHtml(value) {
         return String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -249,6 +294,10 @@
             hour: '2-digit',
             minute: '2-digit'
         });
+    }
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('zh-CN');
     }
 </script>
 </body>
