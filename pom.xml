@@ -8,7 +8,7 @@
     <artifactId>business-debug-agent</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>business-debug-agent</name>
-    <description>Business-facing conversation agent for prompt, few-shot, JSON output, and regression test debugging.</description>
+    <description>DeepSeek conversation agent with MySQL-backed session memory.</description>
 
     <properties>
         <java.version>17</java.version>
