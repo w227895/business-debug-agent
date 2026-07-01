@@ -19,9 +19,14 @@ spring:
       api-key: ${DEEPSEEK_API_KEY:}
       chat:
         options:
-          model: deepseek-chat
+          model: ${agent.ai.model:deepseek-chat}
           temperature: 0.7
 
 logging:
   level:
     org.springframework.ai: INFO
+
+agent:
+  ai:
+    provider: deepseek
+    model: deepseek-chat

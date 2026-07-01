@@ -3,40 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSeek 对话 Agent</title>
+    <title>Business Debug Agent</title>
     <link rel="stylesheet" href="/css/agent.css">
 </head>
 <body>
 <main class="app-shell">
     <aside class="sidebar">
-        <div class="brand">DeepSeek Agent</div>
-        <nav class="nav-list">
-            <button id="newChatButton" class="nav-action" type="button">新对话</button>
-        </nav>
-        <section class="session-box">
-            <h2>历史对话</h2>
-            <div id="sessionList" class="session-empty">暂无</div>
-        </section>
-        <section class="memory-box">
-            <h2>当前记忆</h2>
-            <div id="memoryState" class="memory-empty">暂无</div>
-        </section>
-        <section class="token-box">
-            <h2>Token 消耗</h2>
-            <div id="tokenState" class="token-empty">暂无</div>
+        <div class="brand">
+            <div class="brand-mark">AI</div>
+            <div>
+                <strong>Business Debug Agent</strong>
+                <span>DeepSeek 调试工作台</span>
+            </div>
+        </div>
+
+        <button id="newChatButton" class="primary-action" type="button">新建会话</button>
+
+        <section class="side-section">
+            <div class="section-heading">
+                <h2>历史会话</h2>
+                <span id="sessionCount">0</span>
+            </div>
+            <div id="sessionList" class="empty-state">暂无会话</div>
         </section>
     </aside>
 
     <section class="conversation">
         <header class="topbar">
             <div>
-                <h1>DeepSeek 对话 Agent</h1>
-                <p>使用 Spring AI 调用 DeepSeek；同一会话的历史消息会作为上下文传给模型。</p>
+                <p class="eyebrow">Conversation</p>
+                <h1>对话调试</h1>
+            </div>
+            <div class="session-chip">
+                <span>当前会话</span>
+                <strong id="currentSessionLabel">未开始</strong>
             </div>
         </header>
 
         <section id="chatPanel" class="chat-panel">
             <div class="message assistant">
+                <div class="avatar">A</div>
                 <div class="bubble">
                     你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
                 </div>
@@ -48,6 +54,30 @@
             <button type="submit">发送</button>
         </form>
     </section>
+
+    <aside class="inspector">
+        <section class="inspector-section">
+            <div class="section-heading">
+                <h2>Token 消耗</h2>
+            </div>
+            <div id="tokenState" class="empty-state">暂无消耗</div>
+        </section>
+
+        <section class="inspector-section">
+            <div class="section-heading">
+                <h2>当前记忆</h2>
+            </div>
+            <div id="memoryState" class="empty-state">暂无记忆</div>
+        </section>
+
+        <section class="inspector-section call-section">
+            <div class="section-heading">
+                <h2>模型调用记录</h2>
+                <button id="refreshCallsButton" class="ghost-action" type="button">刷新</button>
+            </div>
+            <div id="modelCallState" class="empty-state">暂无调用记录</div>
+        </section>
+    </aside>
 </main>
 
 <script>
@@ -56,16 +86,25 @@
     const messageInput = document.getElementById('messageInput');
     const memoryState = document.getElementById('memoryState');
     const tokenState = document.getElementById('tokenState');
+    const modelCallState = document.getElementById('modelCallState');
     const newChatButton = document.getElementById('newChatButton');
+    const refreshCallsButton = document.getElementById('refreshCallsButton');
     const sessionList = document.getElementById('sessionList');
+    const sessionCount = document.getElementById('sessionCount');
+    const currentSessionLabel = document.getElementById('currentSessionLabel');
 
     let sessionId = localStorage.getItem('debug-agent-session-id') || '';
 
     loadSessions();
     loadSession();
+    updateSessionLabel();
 
     newChatButton.addEventListener('click', () => {
         startNewChat();
+    });
+
+    refreshCallsButton.addEventListener('click', async () => {
+        await loadModelCalls();
     });
 
     chatForm.addEventListener('submit', async (event) => {
@@ -86,7 +125,8 @@
         renderWelcome();
         renderMemory({});
         renderTokenUsage({});
-        renderSessions([]);
+        renderModelCalls([]);
+        updateSessionLabel();
         loadSessions();
         messageInput.focus();
     }
@@ -104,9 +144,11 @@
             const body = await response.json();
             sessionId = body.sessionId;
             localStorage.setItem('debug-agent-session-id', sessionId);
+            updateSessionLabel();
             renderMessages(body.messages);
             renderMemory(body.memory);
             renderTokenUsage(body.totalTokenUsage);
+            await loadModelCalls();
         } catch (ignore) {
         }
     }
@@ -122,12 +164,29 @@
         }
     }
 
+    async function loadModelCalls() {
+        if (!sessionId) {
+            renderModelCalls([]);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/chat/${encodeURIComponent(sessionId)}/model-calls`);
+            if (!response.ok) {
+                return;
+            }
+            renderModelCalls(await response.json());
+        } catch (ignore) {
+        }
+    }
+
     async function switchSession(nextSessionId) {
         if (!nextSessionId || nextSessionId === sessionId) {
             return;
         }
         sessionId = nextSessionId;
         localStorage.setItem('debug-agent-session-id', sessionId);
+        updateSessionLabel();
         await loadSession();
         await loadSessions();
     }
@@ -140,7 +199,7 @@
 
         appendMessage('user', message);
         messageInput.value = '';
-        appendMessage('assistant', '正在调用 DeepSeek...');
+        appendMessage('assistant', '正在调用 DeepSeek...', undefined, true);
 
         try {
             const response = await fetch('/api/chat', {
@@ -160,22 +219,26 @@
             const body = await response.json();
             sessionId = body.sessionId;
             localStorage.setItem('debug-agent-session-id', sessionId);
+            updateSessionLabel();
 
-            chatPanel.lastElementChild.remove();
+            removePendingMessage();
             appendMessage('assistant', body.reply, body.tokenUsage);
             renderMemory(body.memory);
             renderTokenUsage(body.totalTokenUsage);
+            await loadModelCalls();
             loadSessions();
         } catch (error) {
-            chatPanel.lastElementChild.remove();
-            appendMessage('assistant', '模型调用失败：' + error.message + '。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。');
+            removePendingMessage();
+            appendMessage('assistant', `模型调用失败：${error.message}。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。`);
+            await loadModelCalls();
         }
     }
 
-    function appendMessage(role, content, tokenUsage) {
+    function appendMessage(role, content, tokenUsage, pending = false) {
         const wrapper = document.createElement('div');
-        wrapper.className = `message ${role}`;
+        wrapper.className = `message ${role}${pending ? ' pending' : ''}`;
         wrapper.innerHTML = `
+            <div class="avatar">${role === 'user' ? 'U' : 'A'}</div>
             <div>
                 <div class="bubble">${escapeHtml(content)}</div>
                 ${renderMessageTokenUsage(role, tokenUsage)}
@@ -185,9 +248,17 @@
         chatPanel.scrollTop = chatPanel.scrollHeight;
     }
 
+    function removePendingMessage() {
+        const pending = chatPanel.querySelector('.message.pending');
+        if (pending) {
+            pending.remove();
+        }
+    }
+
     function renderWelcome() {
         chatPanel.innerHTML = `
             <div class="message assistant">
+                <div class="avatar">A</div>
                 <div class="bubble">
                     你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
                 </div>
@@ -197,6 +268,7 @@
 
     function renderMessages(messages) {
         if (!Array.isArray(messages) || messages.length === 0) {
+            renderWelcome();
             return;
         }
         chatPanel.innerHTML = '';
@@ -218,14 +290,16 @@
     }
 
     function renderSessions(sessions) {
-        if (!Array.isArray(sessions) || sessions.length === 0) {
-            sessionList.className = 'session-empty';
-            sessionList.textContent = '暂无';
+        const items = Array.isArray(sessions) ? sessions : [];
+        sessionCount.textContent = String(items.length);
+        if (items.length === 0) {
+            sessionList.className = 'empty-state';
+            sessionList.textContent = '暂无会话';
             return;
         }
 
         sessionList.className = 'session-list';
-        sessionList.innerHTML = sessions.map((item) => {
+        sessionList.innerHTML = items.map((item) => {
             const activeClass = item.sessionId === sessionId ? ' active' : '';
             return `
                 <button class="session-item${activeClass}" type="button" data-session-id="${escapeHtml(item.sessionId)}">
@@ -243,26 +317,88 @@
     function renderMemory(memory) {
         const entries = Object.entries(memory || {});
         if (entries.length === 0) {
-            memoryState.className = 'memory-empty';
-            memoryState.textContent = '暂无';
+            memoryState.className = 'empty-state';
+            memoryState.textContent = '暂无记忆';
             return;
         }
         memoryState.className = 'memory-list';
-        memoryState.innerHTML = entries.map(([key, value]) => `<div><span>${escapeHtml(key)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+        memoryState.innerHTML = entries.map(([key, value]) => `
+            <div class="kv-row">
+                <span>${escapeHtml(key)}</span>
+                <strong>${escapeHtml(value)}</strong>
+            </div>
+        `).join('');
     }
 
     function renderTokenUsage(tokenUsage) {
         if (!tokenUsage || !hasTokens(tokenUsage)) {
-            tokenState.className = 'token-empty';
-            tokenState.textContent = '暂无';
+            tokenState.className = 'empty-state';
+            tokenState.textContent = '暂无消耗';
             return;
         }
-        tokenState.className = 'token-list';
+        tokenState.className = 'token-grid';
         tokenState.innerHTML = `
             <div><span>总计</span><strong>${formatNumber(tokenUsage.totalTokens)}</strong></div>
             <div><span>输入</span><strong>${formatNumber(tokenUsage.promptTokens)}</strong></div>
             <div><span>输出</span><strong>${formatNumber(tokenUsage.completionTokens)}</strong></div>
         `;
+    }
+
+    function renderModelCalls(calls) {
+        const items = Array.isArray(calls) ? calls : [];
+        if (items.length === 0) {
+            modelCallState.className = 'empty-state';
+            modelCallState.textContent = '暂无调用记录';
+            return;
+        }
+
+        modelCallState.className = 'call-list';
+        modelCallState.innerHTML = items.map((item) => {
+            const usage = item.tokenUsage || {};
+            const statusClass = item.success ? 'ok' : 'failed';
+            const statusText = item.success ? '成功' : '失败';
+            const responseText = item.success ? item.responseText : (item.errorMessage || '无错误详情');
+            return `
+                <article class="call-item">
+                    <div class="call-head">
+                        <span class="status-pill ${statusClass}">${statusText}</span>
+                        <strong>${escapeHtml(item.model || item.provider || 'model')}</strong>
+                        <time>${formatTime(item.createdAt)}</time>
+                    </div>
+                    <div class="call-metrics">
+                        <span>${formatNumber(item.durationMillis)} ms</span>
+                        <span>${formatNumber(usage.totalTokens)} tokens</span>
+                    </div>
+                    <details>
+                        <summary>Prompt</summary>
+                        <pre>${escapeHtml(formatPrompt(item.requestMessagesJson))}</pre>
+                    </details>
+                    <details>
+                        <summary>${item.success ? 'Response' : 'Error'}</summary>
+                        <pre>${escapeHtml(responseText || '')}</pre>
+                    </details>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function formatPrompt(value) {
+        if (!value) {
+            return '';
+        }
+        try {
+            const messages = JSON.parse(value);
+            if (!Array.isArray(messages)) {
+                return JSON.stringify(messages, null, 2);
+            }
+            return messages.map((item) => `[${item.role}]\n${item.content}`).join('\n\n');
+        } catch (ignore) {
+            return value;
+        }
+    }
+
+    function updateSessionLabel() {
+        currentSessionLabel.textContent = sessionId ? `${sessionId.slice(0, 8)}...` : '未开始';
     }
 
     function hasTokens(tokenUsage) {

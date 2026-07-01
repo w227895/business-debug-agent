@@ -6,11 +6,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.metadata.Usage;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,19 +23,16 @@ public class SimpleChatAgent {
     private static final int MAX_HISTORY_MESSAGES = 30;
 
     private final ChatSessionMemory memory;
-    private final ChatModel chatModel;
+    private final AiModelClient modelClient;
     private final ObjectMapper objectMapper;
-    private final String modelName;
 
     public SimpleChatAgent(
             ChatSessionMemory memory,
-            ChatModel chatModel,
-            ObjectMapper objectMapper,
-            @Value("${spring.ai.deepseek.chat.options.model:deepseek-chat}") String modelName) {
+            AiModelClient modelClient,
+            ObjectMapper objectMapper) {
         this.memory = memory;
-        this.chatModel = chatModel;
+        this.modelClient = modelClient;
         this.objectMapper = objectMapper;
-        this.modelName = modelName;
     }
 
     public com.fr.ai.debugagent.chat.ChatResponse chat(ChatRequest request) {
@@ -50,7 +42,7 @@ public class SimpleChatAgent {
         memory.addMessage(sessionId, "user", userMessage);
         captureFacts(sessionId, userMessage);
 
-        AiReply aiReply = callDeepSeek(sessionId);
+        AiModelReply aiReply = callModel(sessionId);
         memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage());
 
         return new com.fr.ai.debugagent.chat.ChatResponse(
@@ -77,7 +69,11 @@ public class SimpleChatAgent {
         return memory.listSessions();
     }
 
-    private AiReply callDeepSeek(String sessionId) {
+    public List<ModelCallLog> getModelCallLogs(String sessionId) {
+        return memory.getModelCallLogs(memory.normalizeSessionId(sessionId));
+    }
+
+    private AiModelReply callModel(String sessionId) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
                 你是一个支持上下文记忆的业务对话 Agent。
@@ -101,29 +97,24 @@ public class SimpleChatAgent {
         String requestMessagesJson = toRequestMessagesJson(promptMessages);
         long startedAt = System.nanoTime();
         try {
-            ChatResponse response = chatModel.call(new Prompt(promptMessages));
-            if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
-                throw new IllegalStateException("DeepSeek 返回为空");
-            }
-            String reply = response.getResult().getOutput().getText();
-            ChatTokenUsage tokenUsage = toTokenUsage(response);
+            AiModelReply reply = modelClient.call(promptMessages);
             memory.addModelCallLog(
                     sessionId,
-                    "deepseek",
-                    modelName,
+                    modelClient.provider(),
+                    modelClient.model(),
                     requestMessagesJson,
-                    reply,
+                    reply.content(),
                     true,
                     null,
                     null,
                     elapsedMillis(startedAt),
-                    tokenUsage);
-            return new AiReply(reply, tokenUsage);
+                    reply.tokenUsage());
+            return reply;
         } catch (RuntimeException ex) {
             memory.addModelCallLog(
                     sessionId,
-                    "deepseek",
-                    modelName,
+                    modelClient.provider(),
+                    modelClient.model(),
                     requestMessagesJson,
                     null,
                     false,
@@ -133,25 +124,6 @@ public class SimpleChatAgent {
                     ChatTokenUsage.empty());
             throw ex;
         }
-    }
-
-    private ChatTokenUsage toTokenUsage(ChatResponse response) {
-        if (response.getMetadata() == null || response.getMetadata().getUsage() == null) {
-            return ChatTokenUsage.empty();
-        }
-
-        Usage usage = response.getMetadata().getUsage();
-        int promptTokens = positiveOrZero(usage.getPromptTokens());
-        int completionTokens = positiveOrZero(usage.getCompletionTokens());
-        int totalTokens = positiveOrZero(usage.getTotalTokens());
-        if (totalTokens == 0 && (promptTokens > 0 || completionTokens > 0)) {
-            totalTokens = promptTokens + completionTokens;
-        }
-        return new ChatTokenUsage(promptTokens, completionTokens, totalTokens);
-    }
-
-    private int positiveOrZero(Integer value) {
-        return value == null || value < 0 ? 0 : value;
     }
 
     private void captureFacts(String sessionId, String message) {
@@ -205,8 +177,5 @@ public class SimpleChatAgent {
         }
         String message = current.getMessage();
         return message == null ? throwable.getMessage() : message;
-    }
-
-    private record AiReply(String content, ChatTokenUsage tokenUsage) {
     }
 }

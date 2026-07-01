@@ -44,6 +44,16 @@ public class ChatApiController {
         }
     }
 
+    @GetMapping(value = "/{sessionId}/model-calls", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getModelCalls(@PathVariable("sessionId") String sessionId) {
+        try {
+            return ResponseEntity.ok(chatAgent.getModelCallLogs(sessionId));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ChatErrorResponse("模型调用记录读取失败：" + rootMessage(ex)));
+        }
+    }
+
     @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> listSessions() {
         try {

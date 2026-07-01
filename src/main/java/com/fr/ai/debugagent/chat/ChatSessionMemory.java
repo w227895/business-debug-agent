@@ -172,6 +172,47 @@ public class ChatSessionMemory {
                 sessionId);
     }
 
+    public List<ModelCallLog> getModelCallLogs(String sessionId) {
+        return jdbcTemplate.query("""
+                        SELECT
+                            id,
+                            session_id,
+                            provider,
+                            model,
+                            request_messages_json,
+                            response_text,
+                            success,
+                            error_type,
+                            error_message,
+                            duration_millis,
+                            prompt_tokens,
+                            completion_tokens,
+                            total_tokens,
+                            created_at
+                        FROM model_call_logs
+                        WHERE session_id = ?
+                        ORDER BY id DESC
+                        LIMIT 30
+                        """,
+                (rs, rowNum) -> new ModelCallLog(
+                        rs.getLong("id"),
+                        rs.getString("session_id"),
+                        rs.getString("provider"),
+                        rs.getString("model"),
+                        rs.getString("request_messages_json"),
+                        rs.getString("response_text"),
+                        rs.getBoolean("success"),
+                        rs.getString("error_type"),
+                        rs.getString("error_message"),
+                        rs.getLong("duration_millis"),
+                        new ChatTokenUsage(
+                                rs.getInt("prompt_tokens"),
+                                rs.getInt("completion_tokens"),
+                                rs.getInt("total_tokens")),
+                        rs.getTimestamp("created_at").toLocalDateTime()),
+                sessionId);
+    }
+
     public List<ChatSessionSummary> listSessions() {
         return jdbcTemplate.query("""
                         SELECT

@@ -6,13 +6,14 @@
 
 - 首页是简单聊天界面。
 - 后端提供 `/api/chat` 对话接口。
-- 使用 Spring AI `ChatModel` 调用 DeepSeek。
+- 业务层通过 `AiModelClient` 模型抽象层调用大模型，当前默认实现使用 Spring AI 对接 DeepSeek。
 - 前端用 `localStorage` 保存 `sessionId`。
 - 后端按 `sessionId` 将同一会话的历史消息和提取出的记忆事实持久化到 MySQL。
 - 每次调用 DeepSeek 时，后端会把当前 session 的历史消息一起组装进 `Prompt`，让模型基于上下文回答。
 - 侧栏支持新建对话、查看历史对话，并可切换回任意已持久化的会话。
 - 侧栏会展示从会话里提取的简单记忆，例如 `name`、`goal`。
 - 每轮模型回复会记录 prompt、completion、total tokens，并在侧栏展示当前会话累计消耗。
+- 每次模型调用会保存完整 prompt、response、耗时、token 和错误信息，便于后续排查。
 
 ## 必要环境变量
 
@@ -42,6 +43,7 @@ password: root123456
 
 - `chat_messages`：保存每个 `sessionId` 的历史消息。
 - `chat_facts`：保存每个 `sessionId` 提取出的简单记忆，例如 `name`、`goal`。
+- `model_call_logs`：保存每次模型调用的完整请求、响应、耗时、token 和错误信息。
 
 `chat_messages` 同时保存每轮 assistant 回复的 token 消耗：
 
@@ -65,10 +67,25 @@ http://localhost:8080
 
 ## 核心代码
 
-- DeepSeek 对话逻辑：`src/main/java/com/fr/ai/debugagent/chat/SimpleChatAgent.java`
+- 对话编排逻辑：`src/main/java/com/fr/ai/debugagent/chat/SimpleChatAgent.java`
+- 模型抽象接口：`src/main/java/com/fr/ai/debugagent/chat/AiModelClient.java`
+- Spring AI 默认实现：`src/main/java/com/fr/ai/debugagent/chat/SpringAiModelClient.java`
 - 会话记忆：`src/main/java/com/fr/ai/debugagent/chat/ChatSessionMemory.java`
 - 对话接口：`src/main/java/com/fr/ai/debugagent/controller/ChatApiController.java`
 - DeepSeek 配置：`src/main/resources/application.yml`
+
+## 模型切换
+
+当前统一模型入口是：
+
+```yaml
+agent:
+  ai:
+    provider: deepseek
+    model: deepseek-chat
+```
+
+业务代码只依赖 `AiModelClient`，不直接依赖 DeepSeek。后续如果要接 OpenAI、Ollama 或其他供应商，可以新增一个 `AiModelClient` 实现，并把供应商差异收敛在实现类里。
 
 ## 接口示例
 
@@ -98,4 +115,10 @@ GET /api/chat/{sessionId}
 
 ```http
 GET /api/chat/sessions
+```
+
+读取当前会话的模型调用记录：
+
+```http
+GET /api/chat/{sessionId}/model-calls
 ```
