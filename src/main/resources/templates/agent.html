@@ -58,6 +58,14 @@
     <aside class="inspector">
         <section class="inspector-section">
             <div class="section-heading">
+                <h2>模型配置</h2>
+                <button id="refreshModelsButton" class="ghost-action" type="button">刷新</button>
+            </div>
+            <div id="modelState" class="empty-state">正在读取模型配置</div>
+        </section>
+
+        <section class="inspector-section">
+            <div class="section-heading">
                 <h2>Token 消耗</h2>
             </div>
             <div id="tokenState" class="empty-state">暂无消耗</div>
@@ -86,15 +94,19 @@
     const messageInput = document.getElementById('messageInput');
     const memoryState = document.getElementById('memoryState');
     const tokenState = document.getElementById('tokenState');
+    const modelState = document.getElementById('modelState');
     const modelCallState = document.getElementById('modelCallState');
     const newChatButton = document.getElementById('newChatButton');
+    const refreshModelsButton = document.getElementById('refreshModelsButton');
     const refreshCallsButton = document.getElementById('refreshCallsButton');
     const sessionList = document.getElementById('sessionList');
     const sessionCount = document.getElementById('sessionCount');
     const currentSessionLabel = document.getElementById('currentSessionLabel');
 
     let sessionId = localStorage.getItem('debug-agent-session-id') || '';
+    let activeModelLabel = 'DeepSeek';
 
+    loadModels();
     loadSessions();
     loadSession();
     updateSessionLabel();
@@ -105,6 +117,10 @@
 
     refreshCallsButton.addEventListener('click', async () => {
         await loadModelCalls();
+    });
+
+    refreshModelsButton.addEventListener('click', async () => {
+        await loadModels();
     });
 
     chatForm.addEventListener('submit', async (event) => {
@@ -164,6 +180,17 @@
         }
     }
 
+    async function loadModels() {
+        try {
+            const response = await fetch('/api/chat/models');
+            if (!response.ok) {
+                return;
+            }
+            renderModels(await response.json());
+        } catch (ignore) {
+        }
+    }
+
     async function loadModelCalls() {
         if (!sessionId) {
             renderModelCalls([]);
@@ -199,7 +226,7 @@
 
         appendMessage('user', message);
         messageInput.value = '';
-        appendMessage('assistant', '正在调用 DeepSeek...', undefined, true);
+        appendMessage('assistant', `正在调用 ${activeModelLabel}...`, undefined, true);
 
         try {
             const response = await fetch('/api/chat', {
@@ -231,6 +258,34 @@
             removePendingMessage();
             appendMessage('assistant', `模型调用失败：${error.message}。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。`);
             await loadModelCalls();
+        }
+    }
+
+    async function switchModel(modelId) {
+        if (!modelId) {
+            return;
+        }
+
+        modelState.classList.add('is-busy');
+        try {
+            const response = await fetch('/api/chat/models/active', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({modelId: Number(modelId)})
+            });
+            if (!response.ok) {
+                let errorText = `HTTP ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    errorText = errorBody.message || errorText;
+                } catch (ignore) {
+                }
+                throw new Error(errorText);
+            }
+            await loadModels();
+        } catch (error) {
+            modelState.className = 'empty-state';
+            modelState.textContent = `模型切换失败：${error.message}`;
         }
     }
 
@@ -342,6 +397,38 @@
             <div><span>输入</span><strong>${formatNumber(tokenUsage.promptTokens)}</strong></div>
             <div><span>输出</span><strong>${formatNumber(tokenUsage.completionTokens)}</strong></div>
         `;
+    }
+
+    function renderModels(models) {
+        const items = Array.isArray(models) ? models : [];
+        if (items.length === 0) {
+            modelState.className = 'empty-state';
+            modelState.textContent = '暂无可用模型';
+            activeModelLabel = 'DeepSeek';
+            return;
+        }
+
+        const active = items.find((item) => item.active) || items[0];
+        activeModelLabel = active.displayName || active.model || active.provider || '模型';
+        modelState.className = 'model-list';
+        modelState.innerHTML = items.map((item) => {
+            const activeClass = item.active ? ' active' : '';
+            const disabled = item.active ? 'disabled' : '';
+            const actionText = item.active ? '使用中' : '切换';
+            return `
+                <article class="model-item${activeClass}">
+                    <div>
+                        <strong>${escapeHtml(item.displayName || item.model)}</strong>
+                        <span>${escapeHtml(item.provider)} / ${escapeHtml(item.model)}</span>
+                    </div>
+                    <button class="model-switch" type="button" data-model-id="${item.id}" ${disabled}>${actionText}</button>
+                </article>
+            `;
+        }).join('');
+
+        modelState.querySelectorAll('.model-switch').forEach((button) => {
+            button.addEventListener('click', () => switchModel(button.dataset.modelId));
+        });
     }
 
     function renderModelCalls(calls) {

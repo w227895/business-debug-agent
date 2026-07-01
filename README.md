@@ -44,6 +44,7 @@ password: root123456
 - `chat_messages`：保存每个 `sessionId` 的历史消息。
 - `chat_facts`：保存每个 `sessionId` 提取出的简单记忆，例如 `name`、`goal`。
 - `model_call_logs`：保存每次模型调用的完整请求、响应、耗时、token 和错误信息。
+- `ai_model_configs`：保存可用模型配置和当前激活模型，前端切换模型时会更新这张表。
 
 `chat_messages` 同时保存每轮 assistant 回复的 token 消耗：
 
@@ -76,14 +77,12 @@ http://localhost:8080
 
 ## 模型切换
 
-当前统一模型入口是：
+当前模型配置存放在 MySQL 的 `ai_model_configs` 表里，不再由 `application.yml` 决定当前使用哪个模型。前端右侧的“模型配置”面板可以直接切换当前激活模型，下一次对话请求会立即使用新模型。
 
-```yaml
-agent:
-  ai:
-    provider: deepseek
-    model: deepseek-chat
-```
+默认初始化两个 DeepSeek 模型：
+
+- `deepseek-chat`
+- `deepseek-reasoner`
 
 业务代码只依赖 `AiModelClient`，不直接依赖 DeepSeek。后续如果要接 OpenAI、Ollama 或其他供应商，可以新增一个 `AiModelClient` 实现，并把供应商差异收敛在实现类里。
 
@@ -121,4 +120,15 @@ GET /api/chat/sessions
 
 ```http
 GET /api/chat/{sessionId}/model-calls
+```
+
+读取和切换模型配置：
+
+```http
+GET /api/chat/models
+POST /api/chat/models/active
+
+{
+  "modelId": 1
+}
 ```

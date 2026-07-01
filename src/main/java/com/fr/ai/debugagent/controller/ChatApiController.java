@@ -2,6 +2,7 @@ package com.fr.ai.debugagent.controller;
 
 import com.fr.ai.debugagent.chat.ChatErrorResponse;
 import com.fr.ai.debugagent.chat.ChatRequest;
+import com.fr.ai.debugagent.chat.AiModelSwitchRequest;
 import com.fr.ai.debugagent.chat.SimpleChatAgent;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -61,6 +62,26 @@ public class ChatApiController {
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(new ChatErrorResponse("会话列表读取失败：" + rootMessage(ex)));
+        }
+    }
+
+    @GetMapping(value = "/models", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> listModels() {
+        try {
+            return ResponseEntity.ok(chatAgent.listModels());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ChatErrorResponse("模型配置读取失败：" + rootMessage(ex)));
+        }
+    }
+
+    @PostMapping(value = "/models/active", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> switchModel(@Valid @RequestBody AiModelSwitchRequest request) {
+        try {
+            return ResponseEntity.ok(chatAgent.switchModel(request.modelId()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ChatErrorResponse("模型切换失败：" + rootMessage(ex)));
         }
     }
 

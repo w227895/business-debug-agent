@@ -38,3 +38,26 @@ CREATE TABLE IF NOT EXISTS model_call_logs (
     INDEX idx_model_call_logs_session_id_id (session_id, id),
     INDEX idx_model_call_logs_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ai_model_configs (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    provider VARCHAR(64) NOT NULL,
+    model VARCHAR(128) NOT NULL,
+    display_name VARCHAR(128) NOT NULL,
+    temperature DOUBLE NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    active TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uk_ai_model_configs_provider_model (provider, model),
+    INDEX idx_ai_model_configs_enabled_active (enabled, active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO ai_model_configs (provider, model, display_name, temperature, enabled, active, updated_at)
+VALUES
+    ('deepseek', 'deepseek-chat', 'DeepSeek Chat', 0.7, 1, 1, NOW(6)),
+    ('deepseek', 'deepseek-reasoner', 'DeepSeek Reasoner', 0.7, 1, 0, NOW(6))
+ON DUPLICATE KEY UPDATE
+    display_name = VALUES(display_name),
+    temperature = VALUES(temperature),
+    enabled = VALUES(enabled),
+    updated_at = VALUES(updated_at);

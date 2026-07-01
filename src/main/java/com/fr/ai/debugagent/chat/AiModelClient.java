@@ -8,7 +8,5 @@ public interface AiModelClient {
 
     AiModelReply call(List<Message> messages);
 
-    String provider();
-
-    String model();
+    AiModelConfig currentModel();
 }

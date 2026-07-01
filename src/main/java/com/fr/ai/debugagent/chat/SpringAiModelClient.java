@@ -4,8 +4,8 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -14,35 +14,36 @@ import java.util.List;
 public class SpringAiModelClient implements AiModelClient {
 
     private final ChatModel chatModel;
-    private final String provider;
-    private final String model;
+    private final AiModelConfigStore modelConfigStore;
 
     public SpringAiModelClient(
             ChatModel chatModel,
-            @Value("${agent.ai.provider:deepseek}") String provider,
-            @Value("${agent.ai.model:deepseek-chat}") String model) {
+            AiModelConfigStore modelConfigStore) {
         this.chatModel = chatModel;
-        this.provider = provider;
-        this.model = model;
+        this.modelConfigStore = modelConfigStore;
     }
 
     @Override
     public AiModelReply call(List<Message> messages) {
-        ChatResponse response = chatModel.call(new Prompt(messages));
-        if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
-            throw new IllegalStateException(provider + " 返回为空");
+        AiModelConfig modelConfig = modelConfigStore.getActiveModel();
+        if (!"deepseek".equals(modelConfig.provider())) {
+            throw new IllegalStateException("当前运行时仅支持 DeepSeek 模型：" + modelConfig.provider());
         }
-        return new AiModelReply(response.getResult().getOutput().getText(), toTokenUsage(response));
+
+        ChatResponse response = chatModel.call(new Prompt(messages, buildOptions(modelConfig)));
+        if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
+            throw new IllegalStateException(modelConfig.provider() + " 返回为空");
+        }
+        return new AiModelReply(
+                response.getResult().getOutput().getText(),
+                toTokenUsage(response),
+                modelConfig.provider(),
+                modelConfig.model());
     }
 
     @Override
-    public String provider() {
-        return provider;
-    }
-
-    @Override
-    public String model() {
-        return model;
+    public AiModelConfig currentModel() {
+        return modelConfigStore.getActiveModel();
     }
 
     private ChatTokenUsage toTokenUsage(ChatResponse response) {
@@ -62,5 +63,13 @@ public class SpringAiModelClient implements AiModelClient {
 
     private int positiveOrZero(Integer value) {
         return value == null || value < 0 ? 0 : value;
+    }
+
+    private ChatOptions buildOptions(AiModelConfig modelConfig) {
+        ChatOptions.Builder builder = ChatOptions.builder().model(modelConfig.model());
+        if (modelConfig.temperature() != null) {
+            builder.temperature(modelConfig.temperature());
+        }
+        return builder.build();
     }
 }

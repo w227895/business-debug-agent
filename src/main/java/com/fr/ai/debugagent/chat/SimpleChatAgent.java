@@ -24,14 +24,17 @@ public class SimpleChatAgent {
 
     private final ChatSessionMemory memory;
     private final AiModelClient modelClient;
+    private final AiModelConfigStore modelConfigStore;
     private final ObjectMapper objectMapper;
 
     public SimpleChatAgent(
             ChatSessionMemory memory,
             AiModelClient modelClient,
+            AiModelConfigStore modelConfigStore,
             ObjectMapper objectMapper) {
         this.memory = memory;
         this.modelClient = modelClient;
+        this.modelConfigStore = modelConfigStore;
         this.objectMapper = objectMapper;
     }
 
@@ -73,6 +76,14 @@ public class SimpleChatAgent {
         return memory.getModelCallLogs(memory.normalizeSessionId(sessionId));
     }
 
+    public List<AiModelConfig> listModels() {
+        return modelConfigStore.listModels();
+    }
+
+    public AiModelConfig switchModel(long modelId) {
+        return modelConfigStore.activateModel(modelId);
+    }
+
     private AiModelReply callModel(String sessionId) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
@@ -100,8 +111,8 @@ public class SimpleChatAgent {
             AiModelReply reply = modelClient.call(promptMessages);
             memory.addModelCallLog(
                     sessionId,
-                    modelClient.provider(),
-                    modelClient.model(),
+                    reply.provider(),
+                    reply.model(),
                     requestMessagesJson,
                     reply.content(),
                     true,
@@ -111,10 +122,11 @@ public class SimpleChatAgent {
                     reply.tokenUsage());
             return reply;
         } catch (RuntimeException ex) {
+            AiModelConfig activeModel = modelClient.currentModel();
             memory.addModelCallLog(
                     sessionId,
-                    modelClient.provider(),
-                    modelClient.model(),
+                    activeModel.provider(),
+                    activeModel.model(),
                     requestMessagesJson,
                     null,
                     false,
