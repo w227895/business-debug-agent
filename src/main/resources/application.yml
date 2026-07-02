@@ -17,6 +17,14 @@ spring:
   thymeleaf:
     cache: false
   ai:
+    chat:
+      observations:
+        log-prompt: true
+        log-completion: true
+        include-error-logging: true
+    tools:
+      observations:
+        include-content: true
     deepseek:
       api-key: ${DEEPSEEK_API_KEY:}
       chat:
@@ -26,7 +34,7 @@ spring:
 
 logging:
   level:
-    org.springframework.ai: INFO
+    org.springframework.ai: DEBUG
 
 business-api:
   services:
@@ -35,6 +43,18 @@ business-api:
         devb: https://order-devb.flightroutes24.com
         deve: https://order-deve.flightroutes24.com
         prod: https://order.flightroutes24.com
+
+findlog:
+  base-url: ${FINDLOG_BASE_URL:https://devtool.flightroutes24.com}
+  accounts:
+    dev:
+      username: ${FINDLOG_DEV_USERNAME:}
+      password: ${FINDLOG_DEV_PASSWORD:}
+      totp-secret: ${FINDLOG_DEV_TOTP_SECRET:}
+    prod:
+      username: ${FINDLOG_PROD_USERNAME:prod}
+      password: ${FINDLOG_PROD_PASSWORD:placeholder}
+      totp-secret: ${FINDLOG_PROD_TOTP_SECRET:}
 
 oms:
   login:

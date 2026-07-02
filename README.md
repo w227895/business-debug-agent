@@ -115,6 +115,8 @@ http://localhost:8080
 
 - `login_to_oms`：用户在聊天里要求“登录 OMS”“获取 OMS Cookie”“准备 OMS 测试环境/生产环境验证”时，模型可以调用该工具完成 SSO 登录。
 - `extract_order_trace_ids`：用户提供 `parentId` 并要求提取 traceId、查询 order 状态日志或继续日志排查时，模型可以调用该工具请求 order 接口。
+- `list_findlog_services`：用户只给出服务名、机器、泳道而没有具体 `service#machine` 时，模型可以调用该工具查询 FindLog 候选机器。
+- `search_findlog_logs`：用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，模型可以调用该工具请求 FindLog 后端。
 
 工具只返回脱敏信息，例如 Cookie 名称、环境、host 和登录结果；完整 Cookie 只缓存在服务端内存中，供后续后端工具复用，不会写入聊天内容或数据库。
 
@@ -140,6 +142,18 @@ parentId=17428182283024
 ```
 
 该工具会复用同环境已缓存的 OMS Cookie，所以调用前需要先登录对应环境的 OMS。
+
+`search_findlog_logs` 会请求 `https://devtool.flightroutes24.com`，凭据只从环境变量读取：
+
+```powershell
+$env:FINDLOG_BASE_URL='https://devtool.flightroutes24.com'
+$env:FINDLOG_DEV_USERNAME='你的测试日志账号'
+$env:FINDLOG_DEV_PASSWORD='你的测试日志密码'
+$env:FINDLOG_PROD_USERNAME='prod'
+$env:FINDLOG_PROD_PASSWORD='placeholder'
+```
+
+该工具要求传入具体机器级 `service#machine`，例如 `order_deve#deve`，单次最多 3 台机器。未传时间时默认查询最近 30 分钟。
 
 也可以不用模型，直接调用内部验证接口：
 

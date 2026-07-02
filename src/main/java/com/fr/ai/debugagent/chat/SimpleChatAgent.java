@@ -100,7 +100,8 @@ public class SimpleChatAgent {
                 5. 工具返回的 Cookie 只允许用于服务端缓存和后续工具调用，不要在回答里输出完整 Cookie、密码、TOTP secret 或原始登录材料。
                 6. 当用户提供 parentId 并要求提取 traceId、查询 order 状态日志或继续查日志定位时，优先调用 extract_order_trace_ids 工具。
                 7. 如果用户没有明确指定环境，OMS 登录和后续 API/日志排查默认使用当前页面选择的环境；如果用户明确指定 devb、deve 或 prod，则以用户本轮指定为准。
-                8. 回答使用中文，简洁直接。
+                8. 当用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，优先调用 search_findlog_logs 工具；必须使用具体 service#machine，最多 3 台机器，时间范围尽量收窄。若用户没有给出具体 service#machine，先调用 list_findlog_services 查候选机器。
+                9. 回答使用中文，简洁直接。
                 """.formatted(environment)));
 
         List<ChatMessage> history = memory.getMessages(sessionId);
