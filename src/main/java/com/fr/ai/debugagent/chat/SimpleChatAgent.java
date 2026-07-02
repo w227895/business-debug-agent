@@ -92,7 +92,9 @@ public class SimpleChatAgent {
                 1. 必须结合本轮会话历史回答。
                 2. 如果用户问你记得什么，要基于历史消息总结你记住的信息。
                 3. 不要声称自己没有记忆；当前 prompt 中已经包含同一 session 的历史消息。
-                4. 回答使用中文，简洁直接。
+                4. 当用户要求登录 OMS、获取 OMS Cookie、准备测试环境或生产环境 OMS 接口验证时，优先调用可用工具完成登录。
+                5. 工具返回的 Cookie 只允许用于服务端缓存和后续工具调用，不要在回答里输出完整 Cookie、密码、TOTP secret 或原始登录材料。
+                6. 回答使用中文，简洁直接。
                 """));
 
         List<ChatMessage> history = memory.getMessages(sessionId);

@@ -1,0 +1,19 @@
+oms:
+  login:
+    accounts:
+      devb:
+        username: your-devb-oms-username
+        password: your-devb-oms-password
+        totp-secret: your-devb-totp-secret
+        level: 0
+      deve:
+        username: your-deve-oms-username
+        password: your-deve-oms-password
+        totp-secret: your-deve-totp-secret
+        level: 0
+      prod:
+        enabled: false
+        username: your-prod-oms-username
+        password: your-prod-oms-password
+        totp-secret: your-prod-totp-secret
+        level: 1

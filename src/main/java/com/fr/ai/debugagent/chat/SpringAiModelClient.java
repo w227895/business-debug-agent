@@ -4,10 +4,14 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.deepseek.DeepSeekChatOptions;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Component
@@ -15,12 +19,17 @@ public class SpringAiModelClient implements AiModelClient {
 
     private final ChatModel chatModel;
     private final AiModelConfigStore modelConfigStore;
+    private final List<ToolCallback> toolCallbacks;
 
     public SpringAiModelClient(
             ChatModel chatModel,
-            AiModelConfigStore modelConfigStore) {
+            AiModelConfigStore modelConfigStore,
+            ObjectProvider<ToolCallbackProvider> toolCallbackProviders) {
         this.chatModel = chatModel;
         this.modelConfigStore = modelConfigStore;
+        this.toolCallbacks = toolCallbackProviders.orderedStream()
+                .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
+                .toList();
     }
 
     @Override
@@ -65,10 +74,14 @@ public class SpringAiModelClient implements AiModelClient {
         return value == null || value < 0 ? 0 : value;
     }
 
-    private ChatOptions buildOptions(AiModelConfig modelConfig) {
-        ChatOptions.Builder builder = ChatOptions.builder().model(modelConfig.model());
+    private DeepSeekChatOptions buildOptions(AiModelConfig modelConfig) {
+        DeepSeekChatOptions.Builder builder = DeepSeekChatOptions.builder().model(modelConfig.model());
         if (modelConfig.temperature() != null) {
             builder.temperature(modelConfig.temperature());
+        }
+        if (!toolCallbacks.isEmpty() && !modelConfig.model().contains("reasoner")) {
+            builder.toolCallbacks(toolCallbacks);
+            builder.internalToolExecutionEnabled(true);
         }
         return builder.build();
     }

@@ -3,3 +3,4 @@ target/
 .idea/
 *.iml
 .env
+config/oms-login-local.yml

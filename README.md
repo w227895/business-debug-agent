@@ -23,6 +23,27 @@
 $env:DEEPSEEK_API_KEY='你的真实DeepSeekKey'
 ```
 
+如果要让 Agent 使用 OMS 登录工具，把本地配置写到 `config/oms-login-local.yml`。这个文件已被 `.gitignore` 忽略，不要提交到 Git。可以从示例复制：
+
+```powershell
+Copy-Item .\config\oms-login-local.example.yml .\config\oms-login-local.yml
+```
+
+然后填写对应环境：
+
+```yaml
+oms:
+  login:
+    accounts:
+      deve:
+        username: 你的OMS测试账号
+        password: 你的OMS测试密码
+        totp-secret: 你的TOTP Secret
+        level: 0
+```
+
+生产环境默认禁用，需要在 `prod.enabled` 显式改为 `true`。
+
 当前如果 key 无效，接口会返回 500，后端日志会出现类似：
 
 ```text
@@ -73,6 +94,7 @@ http://localhost:8080
 - Spring AI 默认实现：`src/main/java/com/fr/ai/debugagent/chat/SpringAiModelClient.java`
 - 会话记忆：`src/main/java/com/fr/ai/debugagent/chat/ChatSessionMemory.java`
 - 对话接口：`src/main/java/com/fr/ai/debugagent/controller/ChatApiController.java`
+- OMS 登录工具：`src/main/java/com/fr/ai/debugagent/oms/OmsLoginTools.java`
 - DeepSeek 配置：`src/main/resources/application.yml`
 
 ## 模型切换
@@ -85,6 +107,29 @@ http://localhost:8080
 - `deepseek-reasoner`
 
 业务代码只依赖 `AiModelClient`，不直接依赖 DeepSeek。后续如果要接 OpenAI、Ollama 或其他供应商，可以新增一个 `AiModelClient` 实现，并把供应商差异收敛在实现类里。
+
+## AI Tools
+
+当前已注册 `login_to_oms` 工具。用户在聊天里要求“登录 OMS”“获取 OMS Cookie”“准备 OMS 测试环境/生产环境验证”时，模型可以调用该工具完成 SSO 登录。
+
+工具只返回脱敏信息，例如 Cookie 名称、环境、host 和登录结果；完整 Cookie 只缓存在服务端内存中，供后续后端工具复用，不会写入聊天内容或数据库。
+
+也可以不用模型，直接调用内部验证接口：
+
+```http
+POST /api/oms/login
+Content-Type: application/json
+
+{
+  "environment": "deve"
+}
+```
+
+查看当前缓存状态：
+
+```http
+GET /api/oms/cookies/deve
+```
 
 ## 接口示例
 

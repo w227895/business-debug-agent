@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  config:
+    import: optional:file:./config/oms-login-local.yml
   application:
     name: business-debug-agent
   datasource:
@@ -25,3 +27,33 @@ spring:
 logging:
   level:
     org.springframework.ai: INFO
+
+oms:
+  login:
+    public-key: 04eb5a97ac9efcfd5530d57643d6f4612c191e3071f45b3117a90175d4422eb6160da11ef707ef7c32348e1c04e3f4d33cc2ff833acea2a412418a4330c7f11e40
+    accounts:
+      devb:
+        enabled: true
+        sso-host: sso-devb.flightroutes24.com
+        oms-host: oms-devb.flightroutes24.com
+        username: ${OMS_DEVB_USERNAME:}
+        password: ${OMS_DEVB_PASSWORD:}
+        totp-secret: ${OMS_DEVB_TOTP_SECRET:}
+        level: ${OMS_DEVB_LEVEL:0}
+      deve:
+        enabled: true
+        sso-host: sso-deve.flightroutes24.com
+        oms-host: oms-deve.flightroutes24.com
+        username: ${OMS_DEVE_USERNAME:}
+        password: ${OMS_DEVE_PASSWORD:}
+        totp-secret: ${OMS_DEVE_TOTP_SECRET:}
+        level: ${OMS_DEVE_LEVEL:0}
+      prod:
+        enabled: ${OMS_PROD_LOGIN_ENABLED:false}
+        production: true
+        sso-host: login.flightroutes24.com
+        oms-host: oms.flightroutes24.com
+        username: ${OMS_PROD_USERNAME:}
+        password: ${OMS_PROD_PASSWORD:}
+        totp-secret: ${OMS_PROD_TOTP_SECRET:}
+        level: ${OMS_PROD_LEVEL:1}
