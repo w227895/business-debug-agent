@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,11 +42,13 @@ public class SimpleChatAgent {
     public com.fr.ai.debugagent.chat.ChatResponse chat(ChatRequest request) {
         String sessionId = memory.normalizeSessionId(request.sessionId());
         String userMessage = request.message().trim();
+        String environment = normalizeEnvironment(request.environment());
 
         memory.addMessage(sessionId, "user", userMessage);
+        memory.remember(sessionId, "environment", environment);
         captureFacts(sessionId, userMessage);
 
-        AiModelReply aiReply = callModel(sessionId);
+        AiModelReply aiReply = callModel(sessionId, environment);
         memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage());
 
         return new com.fr.ai.debugagent.chat.ChatResponse(
@@ -84,18 +87,21 @@ public class SimpleChatAgent {
         return modelConfigStore.activateModel(modelId);
     }
 
-    private AiModelReply callModel(String sessionId) {
+    private AiModelReply callModel(String sessionId, String environment) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
                 你是一个支持上下文记忆的业务对话 Agent。
+                当前页面选择的 OMS/API 环境是：%s。
                 要求：
                 1. 必须结合本轮会话历史回答。
                 2. 如果用户问你记得什么，要基于历史消息总结你记住的信息。
                 3. 不要声称自己没有记忆；当前 prompt 中已经包含同一 session 的历史消息。
                 4. 当用户要求登录 OMS、获取 OMS Cookie、准备测试环境或生产环境 OMS 接口验证时，优先调用可用工具完成登录。
                 5. 工具返回的 Cookie 只允许用于服务端缓存和后续工具调用，不要在回答里输出完整 Cookie、密码、TOTP secret 或原始登录材料。
-                6. 回答使用中文，简洁直接。
-                """));
+                6. 当用户提供 parentId 并要求提取 traceId、查询 order 状态日志或继续查日志定位时，优先调用 extract_order_trace_ids 工具。
+                7. 如果用户没有明确指定环境，OMS 登录和后续 API/日志排查默认使用当前页面选择的环境；如果用户明确指定 devb、deve 或 prod，则以用户本轮指定为准。
+                8. 回答使用中文，简洁直接。
+                """.formatted(environment)));
 
         List<ChatMessage> history = memory.getMessages(sessionId);
         int start = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
@@ -150,6 +156,17 @@ public class SimpleChatAgent {
         if (goalMatcher.find()) {
             memory.remember(sessionId, "goal", goalMatcher.group(1).trim());
         }
+    }
+
+    private String normalizeEnvironment(String environment) {
+        if (environment == null || environment.isBlank()) {
+            return "deve";
+        }
+        String normalized = environment.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "devb", "deve", "prod" -> normalized;
+            default -> "deve";
+        };
     }
 
     private String toRequestMessagesJson(List<Message> messages) {

@@ -34,9 +34,15 @@
                 <p class="eyebrow">Conversation</p>
                 <h1>对话调试</h1>
             </div>
-            <div class="session-chip">
-                <span>当前会话</span>
-                <strong id="currentSessionLabel">未开始</strong>
+            <div class="topbar-actions">
+                <div class="session-chip environment-chip">
+                    <span>当前环境</span>
+                    <strong id="currentEnvironmentLabel">deve</strong>
+                </div>
+                <div class="session-chip">
+                    <span>当前会话</span>
+                    <strong id="currentSessionLabel">未开始</strong>
+                </div>
             </div>
         </header>
 
@@ -56,6 +62,13 @@
     </section>
 
     <aside class="inspector">
+        <section class="inspector-section">
+            <div class="section-heading">
+                <h2>运行环境</h2>
+            </div>
+            <div id="environmentState" class="environment-options"></div>
+        </section>
+
         <section class="inspector-section">
             <div class="section-heading">
                 <h2>模型配置</h2>
@@ -102,10 +115,19 @@
     const sessionList = document.getElementById('sessionList');
     const sessionCount = document.getElementById('sessionCount');
     const currentSessionLabel = document.getElementById('currentSessionLabel');
+    const currentEnvironmentLabel = document.getElementById('currentEnvironmentLabel');
+    const environmentState = document.getElementById('environmentState');
 
     let sessionId = localStorage.getItem('debug-agent-session-id') || '';
+    let currentEnvironment = normalizeEnvironment(localStorage.getItem('debug-agent-environment') || 'deve');
     let activeModelLabel = 'DeepSeek';
+    const environments = [
+        {code: 'deve', label: 'DEVE', hint: '测试环境'},
+        {code: 'devb', label: 'DEVB', hint: '联调环境'},
+        {code: 'prod', label: 'PROD', hint: '生产环境'}
+    ];
 
+    renderEnvironmentOptions();
     loadModels();
     loadSessions();
     loadSession();
@@ -224,6 +246,11 @@
             return;
         }
 
+        const detectedEnvironment = detectEnvironment(message);
+        if (detectedEnvironment && detectedEnvironment !== currentEnvironment) {
+            switchEnvironment(detectedEnvironment);
+        }
+
         appendMessage('user', message);
         messageInput.value = '';
         appendMessage('assistant', `正在调用 ${activeModelLabel}...`, undefined, true);
@@ -232,7 +259,7 @@
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({sessionId, message})
+                body: JSON.stringify({sessionId, environment: currentEnvironment, message})
             });
             if (!response.ok) {
                 let errorText = `HTTP ${response.status}`;
@@ -287,6 +314,29 @@
             modelState.className = 'empty-state';
             modelState.textContent = `模型切换失败：${error.message}`;
         }
+    }
+
+    function switchEnvironment(environment) {
+        currentEnvironment = normalizeEnvironment(environment);
+        localStorage.setItem('debug-agent-environment', currentEnvironment);
+        renderEnvironmentOptions();
+    }
+
+    function renderEnvironmentOptions() {
+        currentEnvironmentLabel.textContent = currentEnvironment;
+        environmentState.innerHTML = environments.map((item) => {
+            const activeClass = item.code === currentEnvironment ? ' active' : '';
+            return `
+                <button class="environment-option${activeClass}" type="button" data-environment="${item.code}">
+                    <strong>${item.label}</strong>
+                    <span>${item.hint}</span>
+                </button>
+            `;
+        }).join('');
+
+        environmentState.querySelectorAll('.environment-option').forEach((button) => {
+            button.addEventListener('click', () => switchEnvironment(button.dataset.environment));
+        });
     }
 
     function appendMessage(role, content, tokenUsage, pending = false) {
@@ -486,6 +536,25 @@
 
     function updateSessionLabel() {
         currentSessionLabel.textContent = sessionId ? `${sessionId.slice(0, 8)}...` : '未开始';
+    }
+
+    function detectEnvironment(message) {
+        const value = String(message || '').toLowerCase();
+        if (/\bdevb\b/.test(value)) {
+            return 'devb';
+        }
+        if (/\bdeve\b/.test(value)) {
+            return 'deve';
+        }
+        if (/\bprod\b|生产环境|线上环境/.test(value)) {
+            return 'prod';
+        }
+        return '';
+    }
+
+    function normalizeEnvironment(environment) {
+        const value = String(environment || '').trim().toLowerCase();
+        return ['devb', 'deve', 'prod'].includes(value) ? value : 'deve';
     }
 
     function hasTokens(tokenUsage) {

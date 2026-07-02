@@ -28,6 +28,14 @@ logging:
   level:
     org.springframework.ai: INFO
 
+business-api:
+  services:
+    order:
+      base-urls:
+        devb: https://order-devb.flightroutes24.com
+        deve: https://order-deve.flightroutes24.com
+        prod: https://order.flightroutes24.com
+
 oms:
   login:
     public-key: 04eb5a97ac9efcfd5530d57643d6f4612c191e3071f45b3117a90175d4422eb6160da11ef707ef7c32348e1c04e3f4d33cc2ff833acea2a412418a4330c7f11e40
@@ -49,7 +57,7 @@ oms:
         totp-secret: ${OMS_DEVE_TOTP_SECRET:}
         level: ${OMS_DEVE_LEVEL:0}
       prod:
-        enabled: ${OMS_PROD_LOGIN_ENABLED:false}
+        enabled: ${OMS_PROD_LOGIN_ENABLED:true}
         production: true
         sso-host: login.flightroutes24.com
         oms-host: oms.flightroutes24.com

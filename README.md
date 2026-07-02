@@ -11,6 +11,7 @@
 - 后端按 `sessionId` 将同一会话的历史消息和提取出的记忆事实持久化到 MySQL。
 - 每次调用 DeepSeek 时，后端会把当前 session 的历史消息一起组装进 `Prompt`，让模型基于上下文回答。
 - 侧栏支持新建对话、查看历史对话，并可切换回任意已持久化的会话。
+- 页面支持切换当前运行环境：`deve`、`devb`、`prod`。对话请求会携带当前环境，OMS 登录和后续排查默认使用该环境。
 - 侧栏会展示从会话里提取的简单记忆，例如 `name`、`goal`。
 - 每轮模型回复会记录 prompt、completion、total tokens，并在侧栏展示当前会话累计消耗。
 - 每次模型调用会保存完整 prompt、response、耗时、token 和错误信息，便于后续排查。
@@ -42,7 +43,7 @@ oms:
         level: 0
 ```
 
-生产环境默认禁用，需要在 `prod.enabled` 显式改为 `true`。
+生产环境默认启用；如需临时关闭，可设置 `OMS_PROD_LOGIN_ENABLED=false` 或在本地配置里把 `prod.enabled` 改为 `false`。
 
 当前如果 key 无效，接口会返回 500，后端日志会出现类似：
 
@@ -110,9 +111,35 @@ http://localhost:8080
 
 ## AI Tools
 
-当前已注册 `login_to_oms` 工具。用户在聊天里要求“登录 OMS”“获取 OMS Cookie”“准备 OMS 测试环境/生产环境验证”时，模型可以调用该工具完成 SSO 登录。
+当前已注册：
+
+- `login_to_oms`：用户在聊天里要求“登录 OMS”“获取 OMS Cookie”“准备 OMS 测试环境/生产环境验证”时，模型可以调用该工具完成 SSO 登录。
+- `extract_order_trace_ids`：用户提供 `parentId` 并要求提取 traceId、查询 order 状态日志或继续日志排查时，模型可以调用该工具请求 order 接口。
 
 工具只返回脱敏信息，例如 Cookie 名称、环境、host 和登录结果；完整 Cookie 只缓存在服务端内存中，供后续后端工具复用，不会写入聊天内容或数据库。
+
+`extract_order_trace_ids` 会按当前页面环境选择 order 服务地址：
+
+```yaml
+business-api:
+  services:
+    order:
+      base-urls:
+        devb: https://order-devb.flightroutes24.com
+        deve: https://order-deve.flightroutes24.com
+        prod: https://order.flightroutes24.com
+```
+
+当前调用的 order 状态日志接口：
+
+```http
+POST /order/geAllStatusOrdertLogs.do
+Content-Type: application/x-www-form-urlencoded
+
+parentId=17428182283024
+```
+
+该工具会复用同环境已缓存的 OMS Cookie，所以调用前需要先登录对应环境的 OMS。
 
 也可以不用模型，直接调用内部验证接口：
 
@@ -139,6 +166,7 @@ Content-Type: application/json
 
 {
   "sessionId": "",
+  "environment": "deve",
   "message": "我叫老王，我的目标是做一个业务调试 Agent"
 }
 ```

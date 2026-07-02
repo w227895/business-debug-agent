@@ -164,9 +164,50 @@ button {
 .session-list,
 .call-list,
 .memory-list,
-.model-list {
+.model-list,
+.environment-options {
     display: grid;
     gap: 10px;
+}
+
+.environment-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.environment-option {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    min-height: 58px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-soft);
+    color: var(--text);
+    padding: 9px 8px;
+    text-align: center;
+}
+
+.environment-option:hover,
+.environment-option.active {
+    border-color: #8fb5ff;
+    background: #eef4ff;
+}
+
+.environment-option strong,
+.environment-option span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.environment-option strong {
+    color: var(--accent-strong);
+    font-size: 13px;
+}
+
+.environment-option span {
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .session-list {
@@ -218,6 +259,13 @@ button {
     padding: 18px 22px;
 }
 
+.topbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
 .eyebrow {
     margin: 0 0 5px;
     font-weight: 800;
@@ -245,6 +293,10 @@ button {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 13px;
+}
+
+.environment-chip strong {
+    text-transform: uppercase;
 }
 
 .chat-panel {
@@ -589,5 +641,14 @@ pre {
 
     .topbar {
         align-items: stretch;
+    }
+
+    .topbar-actions {
+        justify-content: stretch;
+    }
+
+    .session-chip {
+        min-width: 0;
+        flex: 1 1 140px;
     }
 }
