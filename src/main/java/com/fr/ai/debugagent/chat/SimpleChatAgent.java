@@ -2,6 +2,7 @@ package com.fr.ai.debugagent.chat;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fr.ai.debugagent.findlog.FindLogRequestContext;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -13,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,19 +29,30 @@ public class SimpleChatAgent {
     private final AiModelClient modelClient;
     private final AiModelConfigStore modelConfigStore;
     private final ObjectMapper objectMapper;
+    private final FindLogRequestContext findLogRequestContext;
 
     public SimpleChatAgent(
             ChatSessionMemory memory,
             AiModelClient modelClient,
             AiModelConfigStore modelConfigStore,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            FindLogRequestContext findLogRequestContext) {
         this.memory = memory;
         this.modelClient = modelClient;
         this.modelConfigStore = modelConfigStore;
         this.objectMapper = objectMapper;
+        this.findLogRequestContext = findLogRequestContext;
     }
 
     public com.fr.ai.debugagent.chat.ChatResponse chat(ChatRequest request) {
+        return chat(request, null);
+    }
+
+    public com.fr.ai.debugagent.chat.ChatResponse chatStream(ChatRequest request, Consumer<String> chunkConsumer) {
+        return chat(request, chunkConsumer);
+    }
+
+    private com.fr.ai.debugagent.chat.ChatResponse chat(ChatRequest request, Consumer<String> chunkConsumer) {
         String sessionId = memory.normalizeSessionId(request.sessionId());
         String userMessage = request.message().trim();
         String environment = normalizeEnvironment(request.environment());
@@ -48,7 +61,7 @@ public class SimpleChatAgent {
         memory.remember(sessionId, "environment", environment);
         captureFacts(sessionId, userMessage);
 
-        AiModelReply aiReply = callModel(sessionId, environment, userMessage);
+        AiModelReply aiReply = callModel(sessionId, environment, userMessage, chunkConsumer);
         memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage(), aiReply.toolCalls());
 
         return new com.fr.ai.debugagent.chat.ChatResponse(
@@ -92,7 +105,7 @@ public class SimpleChatAgent {
         return modelConfigStore.activateModel(modelId);
     }
 
-    private AiModelReply callModel(String sessionId, String environment, String latestUserMessage) {
+    private AiModelReply callModel(String sessionId, String environment, String latestUserMessage, Consumer<String> chunkConsumer) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
                 你是一个支持上下文记忆的业务对话 Agent。
@@ -105,7 +118,7 @@ public class SimpleChatAgent {
                 5. 工具返回的 Cookie 只允许用于服务端缓存和后续工具调用，不要在回答里输出完整 Cookie、密码、TOTP secret 或原始登录材料。
                 6. 当用户提供 parentId 并要求提取 traceId、查询 order 状态日志或继续查日志定位时，优先调用 extract_order_trace_ids 工具。
                 7. 如果用户没有明确指定环境，OMS 登录和后续 API/日志排查默认使用当前页面选择的环境；如果用户明确指定 devb、deve 或 prod，则以用户本轮指定为准。
-                8. 当用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，优先调用 search_findlog_logs 工具；必须使用具体 service#machine，最多 3 台机器，时间范围尽量收窄。若用户没有给出具体 service#machine，先调用 list_findlog_services 查候选机器。
+                8. 当用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，优先调用 search_findlog_logs 工具；必须使用具体 service#machine，最多 3 台机器，时间范围尽量收窄。traceId/精确关键词查询默认 contextLines=0，避免 grep 增加 -C 上下文。用户未明确给出时间时不要生成 startDate/endDate，由后端按系统时间计算默认窗口。若用户没有给出具体 service#machine，先调用 list_findlog_services 查候选机器。
                 如果用户本轮明确提供了服务、机器、环境或灰度泳道，以用户显式信息为准；不要根据 traceId 前缀猜测或覆盖服务/机器。
                 9. 回答使用中文，简洁直接。
                 """.formatted(environment)));
@@ -128,7 +141,16 @@ public class SimpleChatAgent {
         String requestMessagesJson = toRequestMessagesJson(promptMessages);
         long startedAt = System.nanoTime();
         try {
-            AiModelReply reply = modelClient.call(promptMessages);
+            AiModelReply reply;
+            try (FindLogRequestContext.Scope ignored = findLogRequestContext.use(
+                    logRequestHints.profile(),
+                    logRequestHints.serviceValues(),
+                    logRequestHints.primaryKeyword(),
+                    !logRequestHints.explicitTimeRange())) {
+                reply = chunkConsumer == null
+                        ? modelClient.call(promptMessages)
+                        : modelClient.stream(promptMessages, chunkConsumer);
+            }
             memory.addModelCallLog(
                     sessionId,
                     reply.provider(),

@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @Component
 public class SpringAiModelClient implements AiModelClient {
@@ -64,6 +66,32 @@ public class SpringAiModelClient implements AiModelClient {
     }
 
     @Override
+    public AiModelReply stream(List<Message> messages, Consumer<String> chunkConsumer) {
+        AiModelConfig modelConfig = modelConfigStore.getActiveModel();
+        if (!"deepseek".equals(modelConfig.provider())) {
+            throw new IllegalStateException("当前运行时仅支持 DeepSeek 模型：" + modelConfig.provider());
+        }
+
+        toolCallLoggingAspect.beginCapture();
+        StringBuilder content = new StringBuilder();
+        AtomicReference<ChatTokenUsage> tokenUsage = new AtomicReference<>(ChatTokenUsage.empty());
+        List<ToolCallSummary> toolCalls;
+        try {
+            chatModel.stream(new Prompt(messages, buildOptions(modelConfig)))
+                    .doOnNext(response -> handleStreamResponse(response, content, tokenUsage, chunkConsumer))
+                    .blockLast();
+        } finally {
+            toolCalls = toolCallLoggingAspect.endCapture();
+        }
+        return new AiModelReply(
+                content.toString(),
+                tokenUsage.get(),
+                modelConfig.provider(),
+                modelConfig.model(),
+                toolCalls);
+    }
+
+    @Override
     public AiModelConfig currentModel() {
         return modelConfigStore.getActiveModel();
     }
@@ -97,5 +125,31 @@ public class SpringAiModelClient implements AiModelClient {
             builder.internalToolExecutionEnabled(true);
         }
         return builder.build();
+    }
+
+    private void handleStreamResponse(
+            ChatResponse response,
+            StringBuilder content,
+            AtomicReference<ChatTokenUsage> tokenUsage,
+            Consumer<String> chunkConsumer) {
+        ChatTokenUsage usage = toTokenUsage(response);
+        if (hasTokens(usage)) {
+            tokenUsage.set(usage);
+        }
+        if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
+            return;
+        }
+        String text = response.getResult().getOutput().getText();
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        content.append(text);
+        if (chunkConsumer != null) {
+            chunkConsumer.accept(text);
+        }
+    }
+
+    private boolean hasTokens(ChatTokenUsage tokenUsage) {
+        return tokenUsage.totalTokens() > 0 || tokenUsage.promptTokens() > 0 || tokenUsage.completionTokens() > 0;
     }
 }

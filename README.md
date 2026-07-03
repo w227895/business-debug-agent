@@ -153,7 +153,7 @@ $env:FINDLOG_PROD_USERNAME='prod'
 $env:FINDLOG_PROD_PASSWORD='placeholder'
 ```
 
-该工具要求传入具体机器级 `service#machine`，例如 `order_deve#deve`，单次最多 3 台机器。未传时间时默认查询最近 30 分钟。
+该工具要求传入具体机器级 `service#machine`，例如 `order_deve#deve`，单次最多 3 台机器。未传时间时默认查询当前时间往前 12 小时到当前时间。
 
 也可以不用模型，直接调用内部验证接口：
 

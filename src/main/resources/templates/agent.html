@@ -327,10 +327,10 @@
 
         appendMessage('user', message);
         messageInput.value = '';
-        appendMessage('assistant', `正在调用 ${activeModelLabel}...`, undefined, true);
+        const assistantMessage = appendMessage('assistant', `正在调用 ${activeModelLabel}...`, undefined, true);
 
         try {
-            const response = await fetch('/api/chat', {
+            const response = await fetch('/api/chat/stream', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({sessionId, environment: currentEnvironment, message})
@@ -344,13 +344,12 @@
                 }
                 throw new Error(errorText);
             }
-            const body = await response.json();
+            const body = await readChatStream(response, assistantMessage);
             sessionId = body.sessionId;
             localStorage.setItem('debug-agent-session-id', sessionId);
             updateSessionLabel();
 
-            removePendingMessage();
-            appendMessage('assistant', body.reply, body.tokenUsage, false, body.toolCalls);
+            updateMessage(assistantMessage, body.reply, body.tokenUsage, false, body.toolCalls);
             renderMemory(body.memory);
             renderTokenUsage(body.totalTokenUsage);
             await loadModelCalls();
@@ -359,6 +358,79 @@
             removePendingMessage();
             appendMessage('assistant', `模型调用失败：${error.message}。请确认 DEEPSEEK_API_KEY 已配置，并查看后端日志。`);
             await loadModelCalls();
+        }
+    }
+
+    async function readChatStream(response, assistantMessage) {
+        if (!response.body) {
+            return response.json();
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let streamedContent = '';
+        let finalBody = null;
+
+        while (true) {
+            const {value, done} = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, {stream: true});
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+            for (const rawEvent of events) {
+                const event = parseSseEvent(rawEvent);
+                if (!event) {
+                    continue;
+                }
+                if (event.name === 'delta') {
+                    streamedContent += String(event.data.content || '');
+                    updateMessage(assistantMessage, streamedContent || `正在调用 ${activeModelLabel}...`, undefined, true);
+                } else if (event.name === 'complete') {
+                    finalBody = event.data;
+                } else if (event.name === 'error') {
+                    throw new Error(event.data.message || '模型流式调用失败');
+                }
+            }
+        }
+
+        if (buffer.trim()) {
+            const event = parseSseEvent(buffer);
+            if (event && event.name === 'complete') {
+                finalBody = event.data;
+            } else if (event && event.name === 'error') {
+                throw new Error(event.data.message || '模型流式调用失败');
+            }
+        }
+
+        if (!finalBody) {
+            throw new Error('模型流式响应提前结束');
+        }
+        return finalBody;
+    }
+
+    function parseSseEvent(rawEvent) {
+        const lines = String(rawEvent || '').split('\n');
+        let name = 'message';
+        const dataLines = [];
+        for (const line of lines) {
+            if (line.startsWith('event:')) {
+                name = line.slice('event:'.length).trim();
+            } else if (line.startsWith('data:')) {
+                dataLines.push(line.slice('data:'.length).trimStart());
+            }
+        }
+        if (dataLines.length === 0) {
+            return null;
+        }
+        const dataText = dataLines.join('\n');
+        try {
+            return {name, data: JSON.parse(dataText)};
+        } catch (ignore) {
+            return {name, data: {content: dataText}};
         }
     }
 
@@ -426,6 +498,26 @@
             </div>
         `;
         chatPanel.appendChild(wrapper);
+        chatPanel.scrollTop = chatPanel.scrollHeight;
+        return wrapper;
+    }
+
+    function updateMessage(wrapper, content, tokenUsage, pending = false, toolCalls = []) {
+        if (!wrapper) {
+            return;
+        }
+        const role = wrapper.classList.contains('user') ? 'user' : 'assistant';
+        const isUser = role === 'user';
+        wrapper.className = `message ${role}${pending ? ' pending' : ''}`;
+        const body = wrapper.querySelector('.message-body');
+        if (!body) {
+            return;
+        }
+        body.innerHTML = `
+            <div class="bubble ${isUser ? '' : 'markdown-body'}">${isUser ? renderPlainText(content) : renderMarkdown(content)}</div>
+            ${renderMessageTokenUsage(role, tokenUsage)}
+            ${renderMessageToolCalls(role, toolCalls)}
+        `;
         chatPanel.scrollTop = chatPanel.scrollHeight;
     }
 

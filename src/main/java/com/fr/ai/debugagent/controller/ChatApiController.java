@@ -2,6 +2,7 @@ package com.fr.ai.debugagent.controller;
 
 import com.fr.ai.debugagent.chat.ChatErrorResponse;
 import com.fr.ai.debugagent.chat.ChatRequest;
+import com.fr.ai.debugagent.chat.ChatStreamError;
 import com.fr.ai.debugagent.chat.AiModelSwitchRequest;
 import com.fr.ai.debugagent.chat.SimpleChatAgent;
 import jakarta.validation.Valid;
@@ -15,6 +16,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -54,6 +60,22 @@ public class ChatApiController {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(new ChatErrorResponse("模型调用记录读取失败：" + rootMessage(ex)));
         }
+    }
+
+    @PostMapping(value = "/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@Valid @RequestBody ChatRequest request) {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                var response = chatAgent.chatStream(request, chunk -> sendEvent(emitter, "delta", Map.of("content", chunk)));
+                sendEvent(emitter, "complete", response);
+                emitter.complete();
+            } catch (Exception ex) {
+                sendEvent(emitter, "error", new ChatStreamError("DeepSeek 调用失败：" + rootMessage(ex)));
+                emitter.complete();
+            }
+        });
+        return emitter;
     }
 
     @DeleteMapping("/{sessionId}")
@@ -103,5 +125,13 @@ public class ChatApiController {
             current = current.getCause();
         }
         return current.getMessage() == null ? throwable.getMessage() : current.getMessage();
+    }
+
+    private void sendEvent(SseEmitter emitter, String name, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(name).data(data));
+        } catch (IOException ex) {
+            throw new IllegalStateException("SSE 发送失败：" + rootMessage(ex), ex);
+        }
     }
 }

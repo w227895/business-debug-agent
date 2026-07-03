@@ -8,12 +8,14 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-record LogRequestHints(List<String> traceIds, String profile, String serviceValues) {
+record LogRequestHints(List<String> traceIds, String profile, String serviceValues, boolean explicitTimeRange) {
 
     private static final Pattern TRACE_ID_PATTERN = Pattern.compile("(?<![A-Za-z0-9_.-])(web_[A-Za-z0-9][A-Za-z0-9_.-]{8,})(?![A-Za-z0-9_.-])");
     private static final Pattern DIRECT_SERVICE_PATTERN = Pattern.compile("(?i)(?<![A-Za-z0-9_#-])([a-z][a-z0-9_-]*#[a-z][a-z0-9_-]*)(?![A-Za-z0-9_#-])");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("(?i)(?<![A-Za-z0-9_#-])([a-z][a-z0-9_-]*)(?![A-Za-z0-9_#-])");
     private static final Pattern SERVICE_SUFFIX_PATTERN = Pattern.compile("(?i)^([a-z][a-z0-9]*)[_-]([a-z][a-z0-9]*)$");
+    private static final Pattern TIME_PATTERN = Pattern.compile(
+            "(?i)(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{1,2}:\\d{2}(?::\\d{2})?|\\d{1,2}\\s*(?:小时|分钟|点|时)|今天|昨天|前天|最近|近\\s*\\d+|上午|下午|晚上|早上|中午|凌晨)");
 
     static LogRequestHints fromUserMessage(String message) {
         if (message == null || message.isBlank()) {
@@ -66,11 +68,11 @@ record LogRequestHints(List<String> traceIds, String profile, String serviceValu
         }
 
         String profile = env != null && env.startsWith("prod") ? "PROD" : (traceIds.isEmpty() && serviceValues.isBlank() ? "" : "DEV");
-        return new LogRequestHints(List.copyOf(traceIds), profile, serviceValues);
+        return new LogRequestHints(List.copyOf(traceIds), profile, serviceValues, hasExplicitTimeRange(message));
     }
 
     static LogRequestHints empty() {
-        return new LogRequestHints(List.of(), "", "");
+        return new LogRequestHints(List.of(), "", "", false);
     }
 
     boolean hasAny() {
@@ -102,6 +104,8 @@ record LogRequestHints(List<String> traceIds, String profile, String serviceValu
                 1. traceId 只作为 search_findlog_logs 的 keyword，不要根据 traceId 前缀推断服务、环境或机器。
                 2. 如果本轮已经检测到用户显式指定的 service#machine，必须优先直接使用该值调用 search_findlog_logs。
                 3. 只有用户没有给出具体 service#machine 时，才调用 list_findlog_services 查询候选机器。
+                4. traceId 精确查询默认使用 contextLines=0，让 FindLog 执行不带 -C 的普通 grep。
+                5. 如果用户本轮没有明确指定查询时间，不要自行生成 startDate/endDate；后端会用系统时间默认查询当前时间往前 12 小时到当前时间。
                 """);
         return builder.toString();
     }
@@ -139,6 +143,10 @@ record LogRequestHints(List<String> traceIds, String profile, String serviceValu
 
     private static boolean isEnvironment(String token) {
         return token != null && (token.matches("dev[a-z0-9]*") || token.matches("prod[a-z0-9]*"));
+    }
+
+    private static boolean hasExplicitTimeRange(String message) {
+        return message != null && TIME_PATTERN.matcher(message).find();
     }
 
     private static boolean isLikelyGray(String token) {

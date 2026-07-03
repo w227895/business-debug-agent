@@ -15,6 +15,7 @@ class LogRequestHintsTest {
         assertThat(hints.profile()).isEqualTo("DEV");
         assertThat(hints.serviceValues()).isEqualTo("order_kb#devk");
         assertThat(hints.toSystemInstruction()).contains("不要根据 traceId 前缀推断服务");
+        assertThat(hints.explicitTimeRange()).isFalse();
     }
 
     @Test
@@ -33,5 +34,13 @@ class LogRequestHintsTest {
                 "查 order_kb#devk 里的 web_order-deve_snake-a0f0484dc7364435a8a04a15a8b4dab2");
 
         assertThat(hints.serviceValues()).isEqualTo("order_kb#devk");
+    }
+
+    @Test
+    void detectsExplicitTimeRange() {
+        LogRequestHints hints = LogRequestHints.fromUserMessage(
+                "查 order_kb#devk 里的 trace-1，时间 2026-07-03 10:00:00 到 2026-07-03 11:00:00");
+
+        assertThat(hints.explicitTimeRange()).isTrue();
     }
 }

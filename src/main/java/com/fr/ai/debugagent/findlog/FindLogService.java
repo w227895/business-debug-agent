@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -327,13 +328,13 @@ public class FindLogService {
         return "prod".equals(FindLogProperties.normalizeProfile(profile)) ? "PROD" : "DEV";
     }
 
-    private String contextOption(String contextLines) {
-        int lines = 20;
+    String contextOption(String contextLines) {
+        int lines = 0;
         if (StringUtils.hasText(contextLines)) {
             try {
                 lines = Math.max(0, Math.min(80, Integer.parseInt(contextLines.trim())));
             } catch (NumberFormatException ignored) {
-                lines = 20;
+                lines = 0;
             }
         }
         return lines == 0 ? "" : "-C " + lines;
@@ -344,12 +345,16 @@ public class FindLogService {
         return trimmed.startsWith("\"") && trimmed.endsWith("\"") ? trimmed : "\"" + trimmed + "\"";
     }
 
-    private String defaultStartDate() {
-        return LocalDateTime.now().minusMinutes(30).format(DATE_TIME_FORMATTER);
+    String defaultStartDate() {
+        return systemNow().minusHours(12).format(DATE_TIME_FORMATTER);
     }
 
     private String nowDate() {
-        return LocalDateTime.now().format(DATE_TIME_FORMATTER);
+        return systemNow().format(DATE_TIME_FORMATTER);
+    }
+
+    private LocalDateTime systemNow() {
+        return LocalDateTime.now(ZoneId.systemDefault());
     }
 
     private String base64(String value) {

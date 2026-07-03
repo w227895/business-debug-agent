@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fr.ai.debugagent.oms.TotpGenerator;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FindLogServiceTest {
@@ -17,6 +21,22 @@ class FindLogServiceTest {
     void parsesConcreteServiceValues() {
         assertThat(service.parseServices("order_deve#deve, account_deve#deve qim_deve#deve"))
                 .containsExactly("order_deve#deve", "account_deve#deve", "qim_deve#deve");
+    }
+
+    @Test
+    void defaultsToPlainGrepWithoutContextLines() {
+        assertThat(service.contextOption(null)).isEmpty();
+        assertThat(service.contextOption("")).isEmpty();
+        assertThat(service.contextOption("bad")).isEmpty();
+        assertThat(service.contextOption("80")).isEqualTo("-C 80");
+    }
+
+    @Test
+    void defaultStartDateUsesLastTwelveHours() {
+        LocalDateTime expected = LocalDateTime.now().minusHours(12);
+        LocalDateTime actual = LocalDateTime.parse(service.defaultStartDate(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+        assertThat(Math.abs(Duration.between(expected, actual).toSeconds())).isLessThanOrEqualTo(2);
     }
 
     @Test
