@@ -1,5 +1,7 @@
 package com.fr.ai.debugagent.chat;
 
+import com.fr.ai.debugagent.tool.ToolCallLoggingAspect;
+import com.fr.ai.debugagent.tool.ToolCallSummary;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -20,13 +22,16 @@ public class SpringAiModelClient implements AiModelClient {
     private final ChatModel chatModel;
     private final AiModelConfigStore modelConfigStore;
     private final List<ToolCallback> toolCallbacks;
+    private final ToolCallLoggingAspect toolCallLoggingAspect;
 
     public SpringAiModelClient(
             ChatModel chatModel,
             AiModelConfigStore modelConfigStore,
-            ObjectProvider<ToolCallbackProvider> toolCallbackProviders) {
+            ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
+            ToolCallLoggingAspect toolCallLoggingAspect) {
         this.chatModel = chatModel;
         this.modelConfigStore = modelConfigStore;
+        this.toolCallLoggingAspect = toolCallLoggingAspect;
         this.toolCallbacks = toolCallbackProviders.orderedStream()
                 .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
                 .toList();
@@ -39,7 +44,14 @@ public class SpringAiModelClient implements AiModelClient {
             throw new IllegalStateException("当前运行时仅支持 DeepSeek 模型：" + modelConfig.provider());
         }
 
-        ChatResponse response = chatModel.call(new Prompt(messages, buildOptions(modelConfig)));
+        toolCallLoggingAspect.beginCapture();
+        ChatResponse response;
+        List<ToolCallSummary> toolCalls;
+        try {
+            response = chatModel.call(new Prompt(messages, buildOptions(modelConfig)));
+        } finally {
+            toolCalls = toolCallLoggingAspect.endCapture();
+        }
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             throw new IllegalStateException(modelConfig.provider() + " 返回为空");
         }
@@ -47,7 +59,8 @@ public class SpringAiModelClient implements AiModelClient {
                 response.getResult().getOutput().getText(),
                 toTokenUsage(response),
                 modelConfig.provider(),
-                modelConfig.model());
+                modelConfig.model(),
+                toolCalls);
     }
 
     @Override

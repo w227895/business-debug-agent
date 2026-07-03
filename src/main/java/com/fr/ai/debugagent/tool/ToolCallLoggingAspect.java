@@ -13,7 +13,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.regex.Pattern;
 
 @Aspect
@@ -29,11 +31,22 @@ public class ToolCallLoggingAspect {
             "(?i)\\b(password|passwd|cookie|cookieHeader|maskedCookieHeader|totpSecret|totp-secret|secret|apiKey|api-key|token)\\s*=\\s*([^;\\s,}]+)");
     private static final Pattern COOKIE_PAIR = Pattern.compile(
             "(?i)\\b([A-Z0-9_]*(?:COOKIE|SESSION|TOKEN)[A-Z0-9_]*=)[^;\\s,}]+");
+    private static final ThreadLocal<List<ToolCallSummary>> CURRENT_TOOL_CALLS = new ThreadLocal<>();
 
     private final ObjectMapper objectMapper;
 
     public ToolCallLoggingAspect(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    public void beginCapture() {
+        CURRENT_TOOL_CALLS.set(new ArrayList<>());
+    }
+
+    public List<ToolCallSummary> endCapture() {
+        List<ToolCallSummary> calls = CURRENT_TOOL_CALLS.get();
+        CURRENT_TOOL_CALLS.remove();
+        return calls == null ? List.of() : List.copyOf(calls);
     }
 
     @Around("@annotation(tool)")
@@ -53,6 +66,7 @@ public class ToolCallLoggingAspect {
                     methodName,
                     elapsedMs,
                     formatValue(result, MAX_RESULT_LENGTH));
+            recordToolCall(toolName, true, elapsedMs);
             return result;
         } catch (Throwable ex) {
             long elapsedMs = elapsedMillis(startedAt);
@@ -63,7 +77,15 @@ public class ToolCallLoggingAspect {
                     elapsedMs,
                     ex.getClass().getName(),
                     rootMessage(ex));
+            recordToolCall(toolName, false, elapsedMs);
             throw ex;
+        }
+    }
+
+    private void recordToolCall(String toolName, boolean success, long elapsedMs) {
+        List<ToolCallSummary> calls = CURRENT_TOOL_CALLS.get();
+        if (calls != null) {
+            calls.add(new ToolCallSummary(toolName, success, elapsedMs));
         }
     }
 

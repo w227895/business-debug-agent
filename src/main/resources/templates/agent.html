@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Business Debug Agent</title>
-    <link rel="stylesheet" href="/css/agent.css">
+    <link rel="stylesheet" href="/css/agent.css?v=debug-console-2">
 </head>
 <body>
 <main class="app-shell">
@@ -13,7 +13,7 @@
             <div class="brand-mark">AI</div>
             <div>
                 <strong>Business Debug Agent</strong>
-                <span>DeepSeek 调试工作台</span>
+                <span>业务调试通道</span>
             </div>
         </div>
 
@@ -31,7 +31,7 @@
     <section class="conversation">
         <header class="topbar">
             <div>
-                <p class="eyebrow">Conversation</p>
+                <p class="eyebrow">Agent Console</p>
                 <h1>对话调试</h1>
             </div>
             <div class="topbar-actions">
@@ -49,54 +49,75 @@
         <section id="chatPanel" class="chat-panel">
             <div class="message assistant">
                 <div class="avatar">A</div>
-                <div class="bubble">
-                    你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
+                <div class="message-body">
+                    <div class="bubble markdown-body">
+                        <p>你好，我是 DeepSeek 对话 Agent。你可以直接描述订单、日志、接口或业务现象，我会基于当前会话上下文继续追踪。</p>
+                    </div>
                 </div>
             </div>
         </section>
 
         <form id="chatForm" class="composer">
-            <textarea id="messageInput" name="message" rows="3" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
-            <button type="submit">发送</button>
+            <div class="composer-box">
+                <textarea id="messageInput" name="message" rows="2" placeholder="输入业务问题，Enter 发送，Shift+Enter 换行"></textarea>
+                <button type="submit" aria-label="发送消息">发送</button>
+            </div>
         </form>
     </section>
 
     <aside class="inspector">
-        <section class="inspector-section">
-            <div class="section-heading">
-                <h2>运行环境</h2>
+        <section class="inspector-card">
+            <div class="inspector-header">
+                <div>
+                    <p class="eyebrow">Debug Context</p>
+                    <h2>调试面板</h2>
+                </div>
             </div>
-            <div id="environmentState" class="environment-options"></div>
-        </section>
 
-        <section class="inspector-section">
-            <div class="section-heading">
-                <h2>模型配置</h2>
-                <button id="refreshModelsButton" class="ghost-action" type="button">刷新</button>
+            <div class="inspector-tabs" role="tablist" aria-label="调试面板">
+                <button class="inspector-tab active" type="button" role="tab" aria-selected="true" data-inspector-tab="environment">运行环境</button>
+                <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-inspector-tab="model">模型配置</button>
+                <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-inspector-tab="token">Token</button>
+                <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-inspector-tab="memory">记忆</button>
+                <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-inspector-tab="calls">调用记录</button>
             </div>
-            <div id="modelState" class="empty-state">正在读取模型配置</div>
-        </section>
 
-        <section class="inspector-section">
-            <div class="section-heading">
-                <h2>Token 消耗</h2>
-            </div>
-            <div id="tokenState" class="empty-state">暂无消耗</div>
-        </section>
+            <section class="inspector-panel active" data-inspector-panel="environment">
+                <div class="section-heading">
+                    <h2>运行环境</h2>
+                </div>
+                <div id="environmentState" class="environment-options"></div>
+            </section>
 
-        <section class="inspector-section">
-            <div class="section-heading">
-                <h2>当前记忆</h2>
-            </div>
-            <div id="memoryState" class="empty-state">暂无记忆</div>
-        </section>
+            <section class="inspector-panel" data-inspector-panel="model">
+                <div class="section-heading">
+                    <h2>模型配置</h2>
+                    <button id="refreshModelsButton" class="ghost-action" type="button">刷新</button>
+                </div>
+                <div id="modelState" class="empty-state">正在读取模型配置</div>
+            </section>
 
-        <section class="inspector-section call-section">
-            <div class="section-heading">
-                <h2>模型调用记录</h2>
-                <button id="refreshCallsButton" class="ghost-action" type="button">刷新</button>
-            </div>
-            <div id="modelCallState" class="empty-state">暂无调用记录</div>
+            <section class="inspector-panel" data-inspector-panel="token">
+                <div class="section-heading">
+                    <h2>Token 消耗</h2>
+                </div>
+                <div id="tokenState" class="empty-state">暂无消耗</div>
+            </section>
+
+            <section class="inspector-panel" data-inspector-panel="memory">
+                <div class="section-heading">
+                    <h2>当前记忆</h2>
+                </div>
+                <div id="memoryState" class="empty-state">暂无记忆</div>
+            </section>
+
+            <section class="inspector-panel" data-inspector-panel="calls">
+                <div class="section-heading">
+                    <h2>模型调用记录</h2>
+                    <button id="refreshCallsButton" class="ghost-action" type="button">刷新</button>
+                </div>
+                <div id="modelCallState" class="empty-state">暂无调用记录</div>
+            </section>
         </section>
     </aside>
 </main>
@@ -127,6 +148,7 @@
         {code: 'prod', label: 'PROD', hint: '生产环境'}
     ];
 
+    setupInspectorTabs();
     renderEnvironmentOptions();
     loadModels();
     loadSessions();
@@ -139,10 +161,12 @@
 
     refreshCallsButton.addEventListener('click', async () => {
         await loadModelCalls();
+        activateInspectorTab('calls');
     });
 
     refreshModelsButton.addEventListener('click', async () => {
         await loadModels();
+        activateInspectorTab('model');
     });
 
     chatForm.addEventListener('submit', async (event) => {
@@ -156,6 +180,23 @@
             await sendMessage();
         }
     });
+
+    function setupInspectorTabs() {
+        document.querySelectorAll('.inspector-tab').forEach((button) => {
+            button.addEventListener('click', () => activateInspectorTab(button.dataset.inspectorTab));
+        });
+    }
+
+    function activateInspectorTab(tabName) {
+        document.querySelectorAll('.inspector-tab').forEach((button) => {
+            const active = button.dataset.inspectorTab === tabName;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+        document.querySelectorAll('.inspector-panel').forEach((panel) => {
+            panel.classList.toggle('active', panel.dataset.inspectorPanel === tabName);
+        });
+    }
 
     function startNewChat() {
         sessionId = '';
@@ -309,7 +350,7 @@
             updateSessionLabel();
 
             removePendingMessage();
-            appendMessage('assistant', body.reply, body.tokenUsage);
+            appendMessage('assistant', body.reply, body.tokenUsage, false, body.toolCalls);
             renderMemory(body.memory);
             renderTokenUsage(body.totalTokenUsage);
             await loadModelCalls();
@@ -372,14 +413,16 @@
         });
     }
 
-    function appendMessage(role, content, tokenUsage, pending = false) {
+    function appendMessage(role, content, tokenUsage, pending = false, toolCalls = []) {
         const wrapper = document.createElement('div');
+        const isUser = role === 'user';
         wrapper.className = `message ${role}${pending ? ' pending' : ''}`;
         wrapper.innerHTML = `
-            <div class="avatar">${role === 'user' ? 'U' : 'A'}</div>
-            <div>
-                <div class="bubble">${escapeHtml(content)}</div>
+            <div class="avatar">${isUser ? 'U' : 'A'}</div>
+            <div class="message-body">
+                <div class="bubble ${isUser ? '' : 'markdown-body'}">${isUser ? renderPlainText(content) : renderMarkdown(content)}</div>
                 ${renderMessageTokenUsage(role, tokenUsage)}
+                ${renderMessageToolCalls(role, toolCalls)}
             </div>
         `;
         chatPanel.appendChild(wrapper);
@@ -397,8 +440,10 @@
         chatPanel.innerHTML = `
             <div class="message assistant">
                 <div class="avatar">A</div>
-                <div class="bubble">
-                    你好，我是 DeepSeek 对话 Agent。你可以先告诉我你的名字或目标，然后继续追问，我会基于当前会话历史回答。
+                <div class="message-body">
+                    <div class="bubble markdown-body">
+                        <p>你好，我是 DeepSeek 对话 Agent。你可以直接描述订单、日志、接口或业务现象，我会基于当前会话上下文继续追踪。</p>
+                    </div>
                 </div>
             </div>
         `;
@@ -411,7 +456,7 @@
         }
         chatPanel.innerHTML = '';
         for (const item of messages) {
-            appendMessage(item.role, item.content, item.tokenUsage);
+            appendMessage(item.role, item.content, item.tokenUsage, false, item.toolCalls);
         }
     }
 
@@ -423,6 +468,27 @@
             <div class="message-meta">
                 本轮 ${formatNumber(tokenUsage.totalTokens)} tokens
                 <span>输入 ${formatNumber(tokenUsage.promptTokens)} / 输出 ${formatNumber(tokenUsage.completionTokens)}</span>
+            </div>
+        `;
+    }
+
+    function renderMessageToolCalls(role, toolCalls) {
+        const calls = Array.isArray(toolCalls) ? toolCalls : [];
+        if (role !== 'assistant' || calls.length === 0) {
+            return '';
+        }
+        return `
+            <div class="message-tools" aria-label="本轮工具调用">
+                <span>Tools</span>
+                ${calls.map((item) => {
+                    const statusClass = item.success ? 'ok' : 'failed';
+                    const statusText = item.success ? '成功' : '失败';
+                    return `
+                        <span class="tool-chip ${statusClass}" title="${escapeHtml(statusText)} · ${formatNumber(item.durationMillis)} ms">
+                            ${escapeHtml(item.name || 'tool')}
+                        </span>
+                    `;
+                }).join('')}
             </div>
         `;
     }
@@ -557,6 +623,160 @@
                 </article>
             `;
         }).join('');
+    }
+
+    function renderMarkdown(value) {
+        const lines = String(value ?? '').replace(/\r\n/g, '\n').split('\n');
+        const html = [];
+        let index = 0;
+
+        while (index < lines.length) {
+            const line = lines[index];
+
+            if (!line.trim()) {
+                index += 1;
+                continue;
+            }
+
+            const fence = line.match(/^```([\w-]*)\s*$/);
+            if (fence) {
+                const codeLines = [];
+                index += 1;
+                while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+                    codeLines.push(lines[index]);
+                    index += 1;
+                }
+                if (index < lines.length) {
+                    index += 1;
+                }
+                const language = fence[1] ? `<span>${escapeHtml(fence[1])}</span>` : '';
+                html.push(`<div class="code-shell"><div class="code-head">${language}</div><pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre></div>`);
+                continue;
+            }
+
+            if (isTableStart(lines, index)) {
+                const tableLines = [];
+                tableLines.push(lines[index]);
+                index += 2;
+                while (index < lines.length && isTableRow(lines[index])) {
+                    tableLines.push(lines[index]);
+                    index += 1;
+                }
+                html.push(renderMarkdownTable(tableLines));
+                continue;
+            }
+
+            const heading = line.match(/^(#{1,4})\s+(.+)$/);
+            if (heading) {
+                const level = Math.min(heading[1].length + 1, 5);
+                html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+                index += 1;
+                continue;
+            }
+
+            if (/^>\s?/.test(line)) {
+                const quoteLines = [];
+                while (index < lines.length && /^>\s?/.test(lines[index])) {
+                    quoteLines.push(lines[index].replace(/^>\s?/, ''));
+                    index += 1;
+                }
+                html.push(`<blockquote>${quoteLines.map(renderInlineMarkdown).join('<br>')}</blockquote>`);
+                continue;
+            }
+
+            if (/^\s*[-*]\s+/.test(line)) {
+                const items = [];
+                while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+                    items.push(lines[index].replace(/^\s*[-*]\s+/, ''));
+                    index += 1;
+                }
+                html.push(`<ul>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`);
+                continue;
+            }
+
+            if (/^\s*\d+\.\s+/.test(line)) {
+                const items = [];
+                while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
+                    items.push(lines[index].replace(/^\s*\d+\.\s+/, ''));
+                    index += 1;
+                }
+                html.push(`<ol>${items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ol>`);
+                continue;
+            }
+
+            if (/^(状态|提示|注意|错误|成功|失败|进度|结论)[:：]/.test(line.trim())) {
+                html.push(`<div class="md-callout">${renderInlineMarkdown(line.trim())}</div>`);
+                index += 1;
+                continue;
+            }
+
+            const paragraph = [];
+            while (index < lines.length && lines[index].trim() && !isMarkdownBoundary(lines, index)) {
+                paragraph.push(lines[index]);
+                index += 1;
+            }
+            html.push(`<p>${paragraph.map(renderInlineMarkdown).join('<br>')}</p>`);
+        }
+
+        return html.join('') || '<p></p>';
+    }
+
+    function renderPlainText(value) {
+        return escapeHtml(value).replace(/\n/g, '<br>');
+    }
+
+    function renderInlineMarkdown(value) {
+        const codeFragments = [];
+        let text = String(value ?? '').replace(/`([^`]+)`/g, (_, code) => {
+            const token = `@@CODE_${codeFragments.length}@@`;
+            codeFragments.push(`<code>${escapeHtml(code)}</code>`);
+            return token;
+        });
+
+        text = escapeHtml(text)
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+        codeFragments.forEach((fragment, index) => {
+            text = text.replace(`@@CODE_${index}@@`, fragment);
+        });
+        return text;
+    }
+
+    function isMarkdownBoundary(lines, index) {
+        const line = lines[index] || '';
+        return /^```/.test(line)
+            || isTableStart(lines, index)
+            || /^(#{1,4})\s+/.test(line)
+            || /^>\s?/.test(line)
+            || /^\s*[-*]\s+/.test(line)
+            || /^\s*\d+\.\s+/.test(line)
+            || /^(状态|提示|注意|错误|成功|失败|进度|结论)[:：]/.test(line.trim());
+    }
+
+    function isTableStart(lines, index) {
+        return isTableRow(lines[index]) && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] || '');
+    }
+
+    function isTableRow(line) {
+        return typeof line === 'string' && line.includes('|') && line.trim().length > 0;
+    }
+
+    function splitTableCells(line) {
+        return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+    }
+
+    function renderMarkdownTable(tableLines) {
+        const headerCells = splitTableCells(tableLines[0]);
+        const bodyRows = tableLines.slice(1).map(splitTableCells);
+        return `
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>${headerCells.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead>
+                    <tbody>${bodyRows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join('')}</tr>`).join('')}</tbody>
+                </table>
+            </div>
+        `;
     }
 
     function formatPrompt(value) {

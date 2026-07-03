@@ -1,5 +1,9 @@
 package com.fr.ai.debugagent.chat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fr.ai.debugagent.tool.ToolCallSummary;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,9 +19,13 @@ import java.util.UUID;
 public class ChatSessionMemory {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+    private static final TypeReference<List<ToolCallSummary>> TOOL_CALL_LIST_TYPE = new TypeReference<>() {
+    };
 
-    public ChatSessionMemory(JdbcTemplate jdbcTemplate) {
+    public ChatSessionMemory(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -25,6 +33,7 @@ public class ChatSessionMemory {
         ensureColumn("prompt_tokens", "INT NOT NULL DEFAULT 0");
         ensureColumn("completion_tokens", "INT NOT NULL DEFAULT 0");
         ensureColumn("total_tokens", "INT NOT NULL DEFAULT 0");
+        ensureColumn("tool_calls_json", "LONGTEXT NULL");
     }
 
     public String normalizeSessionId(String sessionId) {
@@ -39,6 +48,10 @@ public class ChatSessionMemory {
     }
 
     public void addMessage(String sessionId, String role, String content, ChatTokenUsage tokenUsage) {
+        addMessage(sessionId, role, content, tokenUsage, List.of());
+    }
+
+    public void addMessage(String sessionId, String role, String content, ChatTokenUsage tokenUsage, List<ToolCallSummary> toolCalls) {
         ChatTokenUsage usage = tokenUsage == null ? ChatTokenUsage.empty() : tokenUsage;
         jdbcTemplate.update("""
                         INSERT INTO chat_messages (
@@ -48,9 +61,10 @@ public class ChatSessionMemory {
                             created_at,
                             prompt_tokens,
                             completion_tokens,
-                            total_tokens
+                            total_tokens,
+                            tool_calls_json
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 sessionId,
                 role,
@@ -58,12 +72,13 @@ public class ChatSessionMemory {
                 LocalDateTime.now(),
                 usage.promptTokens(),
                 usage.completionTokens(),
-                usage.totalTokens());
+                usage.totalTokens(),
+                toToolCallsJson(toolCalls));
     }
 
     public List<ChatMessage> getMessages(String sessionId) {
         return jdbcTemplate.query("""
-                        SELECT role, content, created_at, prompt_tokens, completion_tokens, total_tokens
+                        SELECT role, content, created_at, prompt_tokens, completion_tokens, total_tokens, tool_calls_json
                         FROM chat_messages
                         WHERE session_id = ?
                         ORDER BY id ASC
@@ -75,7 +90,8 @@ public class ChatSessionMemory {
                         new ChatTokenUsage(
                                 rs.getInt("prompt_tokens"),
                                 rs.getInt("completion_tokens"),
-                                rs.getInt("total_tokens"))),
+                                rs.getInt("total_tokens")),
+                        fromToolCallsJson(rs.getString("tool_calls_json"))),
                 sessionId);
     }
 
@@ -267,6 +283,28 @@ public class ChatSessionMemory {
             return normalized;
         }
         return normalized.substring(0, 28) + "...";
+    }
+
+    private String toToolCallsJson(List<ToolCallSummary> toolCalls) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(toolCalls);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private List<ToolCallSummary> fromToolCallsJson(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(value, TOOL_CALL_LIST_TYPE);
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
     }
 
     private void ensureColumn(String columnName, String definition) {

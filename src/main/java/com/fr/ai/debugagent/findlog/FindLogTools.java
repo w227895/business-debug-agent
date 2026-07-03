@@ -41,6 +41,7 @@ public class FindLogTools {
                     Search FR FindLog logs through devtool.flightroutes24.com.
                     Use this when the user provides a traceId, keyword, exception, order id, or business symptom and asks to query dev/test or production logs.
                     The serviceValues argument must contain concrete machine-level values like order_deve#deve, separated by comma or whitespace. Maximum 3 machines per call.
+                    If the user explicitly names a service, machine, environment, or gray lane, use that explicit target and do not infer serviceValues from traceId prefixes.
                     The profile argument supports DEV and PROD. If omitted, use DEV for test environment logs.
                     Keep time ranges narrow. Return summarized excerpts only.
                     """)

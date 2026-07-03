@@ -48,8 +48,8 @@ public class SimpleChatAgent {
         memory.remember(sessionId, "environment", environment);
         captureFacts(sessionId, userMessage);
 
-        AiModelReply aiReply = callModel(sessionId, environment);
-        memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage());
+        AiModelReply aiReply = callModel(sessionId, environment, userMessage);
+        memory.addMessage(sessionId, "assistant", aiReply.content(), aiReply.tokenUsage(), aiReply.toolCalls());
 
         return new com.fr.ai.debugagent.chat.ChatResponse(
                 sessionId,
@@ -57,6 +57,7 @@ public class SimpleChatAgent {
                 memory.getMessages(sessionId),
                 memory.getFacts(sessionId),
                 aiReply.tokenUsage(),
+                aiReply.toolCalls(),
                 memory.getTotalTokenUsage(sessionId)
         );
     }
@@ -91,7 +92,7 @@ public class SimpleChatAgent {
         return modelConfigStore.activateModel(modelId);
     }
 
-    private AiModelReply callModel(String sessionId, String environment) {
+    private AiModelReply callModel(String sessionId, String environment, String latestUserMessage) {
         List<Message> promptMessages = new ArrayList<>();
         promptMessages.add(new SystemMessage("""
                 你是一个支持上下文记忆的业务对话 Agent。
@@ -105,8 +106,14 @@ public class SimpleChatAgent {
                 6. 当用户提供 parentId 并要求提取 traceId、查询 order 状态日志或继续查日志定位时，优先调用 extract_order_trace_ids 工具。
                 7. 如果用户没有明确指定环境，OMS 登录和后续 API/日志排查默认使用当前页面选择的环境；如果用户明确指定 devb、deve 或 prod，则以用户本轮指定为准。
                 8. 当用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，优先调用 search_findlog_logs 工具；必须使用具体 service#machine，最多 3 台机器，时间范围尽量收窄。若用户没有给出具体 service#machine，先调用 list_findlog_services 查候选机器。
+                如果用户本轮明确提供了服务、机器、环境或灰度泳道，以用户显式信息为准；不要根据 traceId 前缀猜测或覆盖服务/机器。
                 9. 回答使用中文，简洁直接。
                 """.formatted(environment)));
+
+        LogRequestHints logRequestHints = LogRequestHints.fromUserMessage(latestUserMessage);
+        if (logRequestHints.hasAny()) {
+            promptMessages.add(new SystemMessage(logRequestHints.toSystemInstruction()));
+        }
 
         List<ChatMessage> history = memory.getMessages(sessionId);
         int start = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
