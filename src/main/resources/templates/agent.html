@@ -240,6 +240,39 @@
         await loadSessions();
     }
 
+    async function deleteSession(targetSessionId) {
+        if (!targetSessionId) {
+            return;
+        }
+        const confirmed = window.confirm('删除这个会话？');
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/chat/${encodeURIComponent(targetSessionId)}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                let errorText = `HTTP ${response.status}`;
+                try {
+                    const errorBody = await response.json();
+                    errorText = errorBody.message || errorText;
+                } catch (ignore) {
+                }
+                throw new Error(errorText);
+            }
+
+            if (targetSessionId === sessionId) {
+                startNewChat();
+                return;
+            }
+            await loadSessions();
+        } catch (error) {
+            appendMessage('assistant', `会话删除失败：${error.message}`);
+        }
+    }
+
     async function sendMessage() {
         const message = messageInput.value.trim();
         if (!message) {
@@ -406,16 +439,23 @@
         sessionList.className = 'session-list';
         sessionList.innerHTML = items.map((item) => {
             const activeClass = item.sessionId === sessionId ? ' active' : '';
+            const escapedSessionId = escapeHtml(item.sessionId);
             return `
-                <button class="session-item${activeClass}" type="button" data-session-id="${escapeHtml(item.sessionId)}">
-                    <span>${escapeHtml(item.title)}</span>
-                    <small>${formatTime(item.updatedAt)}</small>
-                </button>
+                <article class="session-item${activeClass}">
+                    <button class="session-open" type="button" data-session-id="${escapedSessionId}">
+                        <span>${escapeHtml(item.title)}</span>
+                        <small>${formatTime(item.updatedAt)}</small>
+                    </button>
+                    <button class="session-delete" type="button" data-session-id="${escapedSessionId}" title="删除会话" aria-label="删除会话">×</button>
+                </article>
             `;
         }).join('');
 
-        sessionList.querySelectorAll('.session-item').forEach((item) => {
+        sessionList.querySelectorAll('.session-open').forEach((item) => {
             item.addEventListener('click', () => switchSession(item.dataset.sessionId));
+        });
+        sessionList.querySelectorAll('.session-delete').forEach((item) => {
+            item.addEventListener('click', () => deleteSession(item.dataset.sessionId));
         });
     }
 

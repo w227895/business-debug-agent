@@ -217,15 +217,16 @@ button {
 
 .session-item {
     display: grid;
-    gap: 5px;
+    grid-template-columns: minmax(0, 1fr) 30px;
+    gap: 6px;
+    align-items: center;
     width: 100%;
     min-height: 58px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--panel-soft);
     color: var(--text);
-    padding: 10px 11px;
-    text-align: left;
+    padding: 8px;
 }
 
 .session-item:hover,
@@ -234,12 +235,43 @@ button {
     background: #eef4ff;
 }
 
-.session-item span {
+.session-open {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    min-height: 42px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    padding: 2px 3px;
+    text-align: left;
+}
+
+.session-open span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 14px;
     font-weight: 650;
+}
+
+.session-delete {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+}
+
+.session-delete:hover {
+    border-color: #f5b5ad;
+    background: var(--danger-bg);
+    color: var(--danger);
 }
 
 .conversation {

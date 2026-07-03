@@ -79,6 +79,10 @@ public class SimpleChatAgent {
         return memory.getModelCallLogs(memory.normalizeSessionId(sessionId));
     }
 
+    public void deleteSession(String sessionId) {
+        memory.deleteSession(memory.normalizeSessionId(sessionId));
+    }
+
     public List<AiModelConfig> listModels() {
         return modelConfigStore.listModels();
     }

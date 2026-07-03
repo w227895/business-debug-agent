@@ -3,6 +3,7 @@ package com.fr.ai.debugagent.chat;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -211,6 +212,20 @@ public class ChatSessionMemory {
                                 rs.getInt("total_tokens")),
                         rs.getTimestamp("created_at").toLocalDateTime()),
                 sessionId);
+    }
+
+    @Transactional
+    public int deleteSession(String sessionId) {
+        int modelCallLogs = jdbcTemplate.update(
+                "DELETE FROM model_call_logs WHERE session_id = ?",
+                sessionId);
+        int facts = jdbcTemplate.update(
+                "DELETE FROM chat_facts WHERE session_id = ?",
+                sessionId);
+        int messages = jdbcTemplate.update(
+                "DELETE FROM chat_messages WHERE session_id = ?",
+                sessionId);
+        return modelCallLogs + facts + messages;
     }
 
     public List<ChatSessionSummary> listSessions() {
