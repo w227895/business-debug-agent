@@ -56,6 +56,19 @@ findlog:
       password: ${FINDLOG_PROD_PASSWORD:placeholder}
       totp-secret: ${FINDLOG_PROD_TOTP_SECRET:}
 
+gitlab:
+  base-url: ${GITLAB_BASE_URL:https://gitlab.flightroutes24.com}
+  token: ${GITLAB_TOKEN:}
+  default-ref: ${GITLAB_DEFAULT_REF:master}
+  max-results: ${GITLAB_MAX_RESULTS:12}
+  max-file-chars: ${GITLAB_MAX_FILE_CHARS:12000}
+  max-projects: ${GITLAB_MAX_PROJECTS:3}
+  projects:
+    order: ${GITLAB_PROJECT_ORDER:}
+    account: ${GITLAB_PROJECT_ACCOUNT:}
+    qim: ${GITLAB_PROJECT_QIM:}
+    msg_center: ${GITLAB_PROJECT_MSG_CENTER:}
+
 oms:
   login:
     public-key: 04eb5a97ac9efcfd5530d57643d6f4612c191e3071f45b3117a90175d4422eb6160da11ef707ef7c32348e1c04e3f4d33cc2ff833acea2a412418a4330c7f11e40

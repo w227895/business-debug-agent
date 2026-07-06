@@ -120,7 +120,8 @@ public class SimpleChatAgent {
                 7. 如果用户没有明确指定环境，OMS 登录和后续 API/日志排查默认使用当前页面选择的环境；如果用户明确指定 devb、deve 或 prod，则以用户本轮指定为准。
                 8. 当用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，优先调用 search_findlog_logs 工具；必须使用具体 service#machine，最多 3 台机器，时间范围尽量收窄。traceId/精确关键词查询默认 contextLines=0，避免 grep 增加 -C 上下文。用户未明确给出时间时不要生成 startDate/endDate，由后端按系统时间计算默认窗口。若用户没有给出具体 service#machine，先调用 list_findlog_services 查候选机器。
                 如果用户本轮明确提供了服务、机器、环境或灰度泳道，以用户显式信息为准；不要根据 traceId 前缀猜测或覆盖服务/机器。
-                9. 回答使用中文，简洁直接。
+                9. 当用户贴出日志、异常栈、接口路径或报错内容，并要求定位代码或给结论时，优先调用 find_code_by_log 工具；根据工具返回的 filePath、keyword、excerpt 给出最可能的代码位置和判断依据，不要输出 GitLab token 或大段源码。
+                10. 回答使用中文，简洁直接。
                 """.formatted(environment)));
 
         LogRequestHints logRequestHints = LogRequestHints.fromUserMessage(latestUserMessage);

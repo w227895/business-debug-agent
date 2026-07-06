@@ -117,6 +117,7 @@ http://localhost:8080
 - `extract_order_trace_ids`：用户提供 `parentId` 并要求提取 traceId、查询 order 状态日志或继续日志排查时，模型可以调用该工具请求 order 接口。
 - `list_findlog_services`：用户只给出服务名、机器、泳道而没有具体 `service#machine` 时，模型可以调用该工具查询 FindLog 候选机器。
 - `search_findlog_logs`：用户提供 traceId、关键词、异常、订单号并要求查询测试环境或生产日志时，模型可以调用该工具请求 FindLog 后端。
+- `find_code_by_log`：用户贴出日志、异常栈、接口路径或报错内容并要求定位代码时，模型可以调用该工具查询 GitLab 代码并读取候选片段。
 
 工具只返回脱敏信息，例如 Cookie 名称、环境、host 和登录结果；完整 Cookie 只缓存在服务端内存中，供后续后端工具复用，不会写入聊天内容或数据库。
 
@@ -171,6 +172,23 @@ Content-Type: application/json
 ```http
 GET /api/oms/cookies/deve
 ```
+
+`find_code_by_log` 会使用 GitLab 只读 Token 查询代码，配置方式如下：
+
+```powershell
+$env:GITLAB_TOKEN='你的只读GitLab Token'
+```
+
+项目映射不是必填。工具会优先从日志里的服务名、包名、接口路径或你传入的 `serviceHint` 动态搜索 GitLab 项目。必要时也可以把别名写到本地 `config/oms-login-local.yml` 做纠偏，例如：
+
+```yaml
+gitlab:
+  token: 你的只读GitLab Token
+  projects:
+    order: your-group/fr_f_deal_order
+```
+
+不要提交真实 Token。该工具只读 GitLab，不会创建分支、提交代码或修改 MR。默认只返回少量候选文件片段，敏感配置文件不会读取原始内容。
 
 ## 接口示例
 

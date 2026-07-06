@@ -17,3 +17,12 @@ oms:
         password: your-prod-oms-password
         totp-secret: your-prod-totp-secret
         level: 1
+
+gitlab:
+  token: your-readonly-gitlab-token
+  # Optional aliases. The Agent can also search GitLab projects dynamically from serviceHint or log text.
+  projects:
+    order: your-group/fr_f_deal_order
+    account: your-group/account
+    qim: your-group/qim
+    msg_center: your-group/msg_center
